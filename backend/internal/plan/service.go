@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -79,6 +80,11 @@ func (s *Service) BootstrapPlan(ctx context.Context, input BootstrapInput) (*Boo
 		CreatedAt: now,
 	}
 	if err := s.repo.CreatePlan(ctx, plan); err != nil {
+		// Race condition: concurrent bootstrap for the same user/week may hit
+		// the UNIQUE(user_id, week_start) constraint between our check and insert.
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return nil, ErrPlanExists
+		}
 		return nil, fmt.Errorf("create plan: %w", err)
 	}
 

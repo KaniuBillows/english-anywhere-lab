@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/bennyshi/english-anywhere-lab/internal/scheduler"
@@ -159,6 +160,22 @@ func (s *Service) SubmitReview(ctx context.Context, input SubmitInput) (*SubmitR
 	}
 
 	if err := s.repo.InsertReviewLog(ctx, tx, logEntry); err != nil {
+		// Race condition: another concurrent request with the same idempotency key
+		// or client_event_id may have inserted between our pre-check and this insert.
+		// On unique-constraint failure, roll back and return the existing result.
+		if isUniqueViolation(err) {
+			tx.Rollback()
+			if input.IdempotencyKey != "" {
+				if result, lookupErr := s.checkExistingReview(ctx, input.UserID, input.IdempotencyKey, ""); lookupErr == nil && result != nil {
+					return result, nil
+				}
+			}
+			if input.ClientEventID != "" {
+				if result, lookupErr := s.checkExistingReview(ctx, input.UserID, "", input.ClientEventID); lookupErr == nil && result != nil {
+					return result, nil
+				}
+			}
+		}
 		return nil, fmt.Errorf("insert review log: %w", err)
 	}
 
@@ -218,4 +235,9 @@ func (s *Service) checkExistingReview(ctx context.Context, userID, idempotencyKe
 		ScheduledDays: scheduledDays,
 		Status:        status,
 	}, nil
+}
+
+// isUniqueViolation checks if the error is a SQLite UNIQUE constraint violation.
+func isUniqueViolation(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }

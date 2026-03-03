@@ -225,13 +225,7 @@ paths:
               "$ref": "#/components/schemas/ReviewSubmitRequest"
       responses:
         '200':
-          description: Review accepted
-          content:
-            application/json:
-              schema:
-                "$ref": "#/components/schemas/ReviewSubmitResponse"
-        '409':
-          description: Duplicate idempotency key accepted as success
+          description: Review accepted (duplicate Idempotency-Key or client_event_id returns the original result with 200)
           content:
             application/json:
               schema:
