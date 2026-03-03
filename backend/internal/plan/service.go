@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/bennyshi/english-anywhere-lab/internal/review"
 	"github.com/google/uuid"
 )
 
@@ -18,12 +17,11 @@ var (
 )
 
 type Service struct {
-	repo       *Repository
-	reviewRepo *review.Repository
+	repo *Repository
 }
 
-func NewService(repo *Repository, reviewRepo *review.Repository) *Service {
-	return &Service{repo: repo, reviewRepo: reviewRepo}
+func NewService(repo *Repository) *Service {
+	return &Service{repo: repo}
 }
 
 type BootstrapInput struct {
@@ -163,31 +161,8 @@ func (s *Service) GetTodayPlan(ctx context.Context, userID, timezone string) (*D
 		return nil, fmt.Errorf("get tasks: %w", err)
 	}
 
-	// Also check for due review cards to enrich the plan
-	dueCount, err := s.reviewRepo.GetDueCount(ctx, userID, time.Now().UTC())
-	if err != nil {
-		dueCount = 0
-	}
-
 	totalMins := 0
-	taskResults := make([]TaskResult, 0, len(tasks)+1)
-
-	// Add review task if there are due cards
-	if dueCount > 0 {
-		reviewMins := dueCount * 1 // estimate 1 min per card, cap at 30
-		if reviewMins > 30 {
-			reviewMins = 30
-		}
-		taskResults = append(taskResults, TaskResult{
-			TaskID:           uuid.New().String(),
-			TaskType:         "review",
-			Title:            fmt.Sprintf("Review %d due cards", dueCount),
-			Status:           "pending",
-			EstimatedMinutes: reviewMins,
-			Virtual:          true,
-		})
-		totalMins += reviewMins
-	}
+	taskResults := make([]TaskResult, 0, len(tasks))
 
 	for _, t := range tasks {
 		totalMins += t.EstimatedMinutes
@@ -214,17 +189,13 @@ func (s *Service) GetTodayPlan(ctx context.Context, userID, timezone string) (*D
 	}, nil
 }
 
-func (s *Service) CompleteTask(ctx context.Context, planID, taskID, completedAt string, durationSeconds *int) (*TaskResult, error) {
-	task, err := s.repo.GetTask(ctx, taskID)
+func (s *Service) CompleteTask(ctx context.Context, userID, planID, taskID, completedAt string, durationSeconds *int) (*TaskResult, error) {
+	task, err := s.repo.GetTaskWithOwner(ctx, taskID, planID, userID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrTaskNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get task: %w", err)
-	}
-
-	if task.PlanID != planID {
-		return nil, ErrTaskNotFound
 	}
 
 	if err := s.repo.CompleteTask(ctx, taskID, completedAt, durationSeconds); err != nil {

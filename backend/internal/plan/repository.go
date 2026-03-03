@@ -155,3 +155,21 @@ func (r *Repository) GetTask(ctx context.Context, taskID string) (*PlanTask, err
 	}
 	return &t, nil
 }
+
+// GetTaskWithOwner fetches a task and verifies it belongs to the given plan and user.
+func (r *Repository) GetTaskWithOwner(ctx context.Context, taskID, planID, userID string) (*PlanTask, error) {
+	var t PlanTask
+	err := r.db.QueryRowContext(ctx,
+		`SELECT pt.id, pt.plan_id, pt.task_date, pt.task_type, pt.title, pt.status,
+		        pt.estimated_minutes, pt.completed_at, pt.duration_seconds
+		 FROM plan_tasks pt
+		 JOIN plans p ON p.id = pt.plan_id
+		 WHERE pt.id = ? AND pt.plan_id = ? AND p.user_id = ?`,
+		taskID, planID, userID,
+	).Scan(&t.ID, &t.PlanID, &t.TaskDate, &t.TaskType, &t.Title, &t.Status,
+		&t.EstimatedMinutes, &t.CompletedAt, &t.DurationSeconds)
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}

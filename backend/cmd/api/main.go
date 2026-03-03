@@ -37,7 +37,7 @@ func main() {
 	reviewSvc := review.NewService(reviewRepo, fsrs)
 
 	planRepo := plan.NewRepository(application.DB)
-	planSvc := plan.NewService(planRepo, reviewRepo)
+	planSvc := plan.NewService(planRepo)
 
 	progressRepo := progress.NewRepository(application.DB)
 	progressSvc := progress.NewService(progressRepo)

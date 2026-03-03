@@ -66,29 +66,21 @@ type SubmitResult struct {
 }
 
 func (s *Service) SubmitReview(ctx context.Context, input SubmitInput) (*SubmitResult, error) {
-	// Check idempotency
+	// Check idempotency by Idempotency-Key header
 	if input.IdempotencyKey != "" {
-		existing, err := s.repo.CheckIdempotencyKey(ctx, input.UserID, input.IdempotencyKey)
-		if err == nil && existing != nil {
-			// Parse state_after for cached result
-			var after map[string]any
-			json.Unmarshal([]byte(existing.StateAfter), &after)
-			dueAt, _ := time.Parse(time.RFC3339, fmt.Sprintf("%v", after["due_at"]))
-			scheduledDays := 0
-			if v, ok := after["scheduled_days"].(float64); ok {
-				scheduledDays = int(v)
-			}
-			status := fmt.Sprintf("%v", after["status"])
-			return &SubmitResult{
-				Accepted:      true,
-				CardID:        existing.CardID,
-				NextDueAt:     dueAt,
-				ScheduledDays: scheduledDays,
-				Status:        status,
-			}, nil
+		if result, err := s.checkExistingReview(ctx, input.UserID, input.IdempotencyKey, ""); err != nil {
+			return nil, err
+		} else if result != nil {
+			return result, nil
 		}
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("check idempotency: %w", err)
+	}
+
+	// Check idempotency by client_event_id (spec: either key hitting means duplicate)
+	if input.ClientEventID != "" {
+		if result, err := s.checkExistingReview(ctx, input.UserID, "", input.ClientEventID); err != nil {
+			return nil, err
+		} else if result != nil {
+			return result, nil
 		}
 	}
 
@@ -189,5 +181,41 @@ func (s *Service) SubmitReview(ctx context.Context, input SubmitInput) (*SubmitR
 		NextDueAt:     result.DueAt,
 		ScheduledDays: result.ScheduledDays,
 		Status:        string(result.Status),
+	}, nil
+}
+
+// checkExistingReview looks up a prior review log by idempotency_key or client_event_id.
+// Returns nil, nil if no existing entry is found.
+func (s *Service) checkExistingReview(ctx context.Context, userID, idempotencyKey, clientEventID string) (*SubmitResult, error) {
+	var existing *ReviewLogEntry
+	var err error
+
+	if idempotencyKey != "" {
+		existing, err = s.repo.CheckIdempotencyKey(ctx, userID, idempotencyKey)
+	} else if clientEventID != "" {
+		existing, err = s.repo.CheckClientEventID(ctx, userID, clientEventID)
+	}
+
+	if errors.Is(err, sql.ErrNoRows) || existing == nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("check idempotency: %w", err)
+	}
+
+	var after map[string]any
+	json.Unmarshal([]byte(existing.StateAfter), &after)
+	dueAt, _ := time.Parse(time.RFC3339, fmt.Sprintf("%v", after["due_at"]))
+	scheduledDays := 0
+	if v, ok := after["scheduled_days"].(float64); ok {
+		scheduledDays = int(v)
+	}
+	status := fmt.Sprintf("%v", after["status"])
+	return &SubmitResult{
+		Accepted:      true,
+		CardID:        existing.CardID,
+		NextDueAt:     dueAt,
+		ScheduledDays: scheduledDays,
+		Status:        status,
 	}, nil
 }

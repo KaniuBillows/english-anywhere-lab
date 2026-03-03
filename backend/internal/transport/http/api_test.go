@@ -68,7 +68,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	reviewSvc := review.NewService(reviewRepo, fsrs)
 
 	planRepo := plan.NewRepository(database)
-	planSvc := plan.NewService(planRepo, reviewRepo)
+	planSvc := plan.NewService(planRepo)
 
 	progressRepo := progress.NewRepository(database)
 	progressSvc := progress.NewService(progressRepo)

@@ -163,15 +163,25 @@ func (r *Repository) InsertReviewLog(ctx context.Context, tx *sql.Tx, entry *Rev
 
 // CheckIdempotencyKey returns the existing review log if idempotency key was already used by this user.
 func (r *Repository) CheckIdempotencyKey(ctx context.Context, userID, key string) (*ReviewLogEntry, error) {
+	return r.findExistingReviewLog(ctx, "idempotency_key", key, userID)
+}
+
+// CheckClientEventID returns the existing review log if client_event_id was already used by this user.
+func (r *Repository) CheckClientEventID(ctx context.Context, userID, clientEventID string) (*ReviewLogEntry, error) {
+	return r.findExistingReviewLog(ctx, "client_event_id", clientEventID, userID)
+}
+
+func (r *Repository) findExistingReviewLog(ctx context.Context, column, value, userID string) (*ReviewLogEntry, error) {
 	var entry ReviewLogEntry
 	var reviewedAt string
 	var responseMs sql.NullInt64
 
-	err := r.db.QueryRowContext(ctx, `
+	query := `
 		SELECT id, user_id, card_id, user_card_state_id, rating, response_ms,
 			   state_before, state_after, client_event_id, idempotency_key, reviewed_at
-		FROM review_logs WHERE idempotency_key = ? AND user_id = ?`, key, userID,
-	).Scan(
+		FROM review_logs WHERE ` + column + ` = ? AND user_id = ?`
+
+	err := r.db.QueryRowContext(ctx, query, value, userID).Scan(
 		&entry.ID, &entry.UserID, &entry.CardID, &entry.UserCardStateID,
 		&entry.Rating, &responseMs,
 		&entry.StateBefore, &entry.StateAfter, &entry.ClientEventID,

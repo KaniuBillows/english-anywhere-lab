@@ -106,6 +106,7 @@ func (h *PlanHandler) GetToday(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PlanHandler) CompleteTask(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
 	planID := chi.URLParam(r, "plan_id")
 	taskID := chi.URLParam(r, "task_id")
 
@@ -115,7 +116,7 @@ func (h *PlanHandler) CompleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.svc.CompleteTask(r.Context(), planID, taskID, req.CompletedAt, req.DurationSeconds)
+	result, err := h.svc.CompleteTask(r.Context(), userID, planID, taskID, req.CompletedAt, req.DurationSeconds)
 	if errors.Is(err, plan.ErrTaskNotFound) {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "task not found")
 		return
