@@ -54,6 +54,7 @@ func (h *PlanHandler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 				Title:            t.Title,
 				Status:           t.Status,
 				EstimatedMinutes: t.EstimatedMinutes,
+				Virtual:          t.Virtual,
 			})
 		}
 		dailyPlans = append(dailyPlans, dto.DailyPlanDTO{
@@ -89,6 +90,7 @@ func (h *PlanHandler) GetToday(w http.ResponseWriter, r *http.Request) {
 			Title:            t.Title,
 			Status:           t.Status,
 			EstimatedMinutes: t.EstimatedMinutes,
+			Virtual:          t.Virtual,
 		})
 	}
 

@@ -13,6 +13,7 @@ type PlanTaskDTO struct {
 	Title            string `json:"title"`
 	Status           string `json:"status"`
 	EstimatedMinutes int    `json:"estimated_minutes"`
+	Virtual          bool   `json:"virtual,omitempty"`
 }
 
 type DailyPlanDTO struct {

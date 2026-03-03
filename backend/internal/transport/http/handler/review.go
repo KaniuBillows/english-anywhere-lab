@@ -59,6 +59,10 @@ func (h *ReviewHandler) GetQueue(w http.ResponseWriter, r *http.Request) {
 func (h *ReviewHandler) Submit(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())
 	idempotencyKey := r.Header.Get("Idempotency-Key")
+	if idempotencyKey == "" {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "Idempotency-Key header is required")
+		return
+	}
 
 	var req dto.ReviewSubmitRequest
 	if err := decodeAndValidate(r, &req); err != nil {

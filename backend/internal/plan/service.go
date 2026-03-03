@@ -53,6 +53,7 @@ type TaskResult struct {
 	Title            string
 	Status           string
 	EstimatedMinutes int
+	Virtual          bool
 }
 
 func (s *Service) BootstrapPlan(ctx context.Context, input BootstrapInput) (*BootstrapResult, error) {
@@ -183,6 +184,7 @@ func (s *Service) GetTodayPlan(ctx context.Context, userID, timezone string) (*D
 			Title:            fmt.Sprintf("Review %d due cards", dueCount),
 			Status:           "pending",
 			EstimatedMinutes: reviewMins,
+			Virtual:          true,
 		})
 		totalMins += reviewMins
 	}

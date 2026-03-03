@@ -104,8 +104,8 @@ func (r *Repository) QueryDueCards(ctx context.Context, userID string, now time.
 	return cards, rows.Err()
 }
 
-// GetUserCardState fetches a single card state by ID.
-func (r *Repository) GetUserCardState(ctx context.Context, stateID string) (*DueCard, error) {
+// GetUserCardState fetches a single card state by (id, user_id) for ownership verification.
+func (r *Repository) GetUserCardState(ctx context.Context, stateID, userID string) (*DueCard, error) {
 	var card DueCard
 	var dueAt string
 	var lastReview sql.NullString
@@ -113,7 +113,7 @@ func (r *Repository) GetUserCardState(ctx context.Context, stateID string) (*Due
 	err := r.db.QueryRowContext(ctx, `
 		SELECT card_id, id, status, due_at, scheduled_days, lapses, reps,
 			   COALESCE(stability, 0), COALESCE(difficulty, 0), last_review_at
-		FROM user_card_states WHERE id = ?`, stateID,
+		FROM user_card_states WHERE id = ? AND user_id = ?`, stateID, userID,
 	).Scan(
 		&card.CardID, &card.UserCardStateID, &card.Status, &dueAt,
 		&card.ScheduledDays, &card.Lapses, &card.Reps,
@@ -161,8 +161,8 @@ func (r *Repository) InsertReviewLog(ctx context.Context, tx *sql.Tx, entry *Rev
 	return err
 }
 
-// CheckIdempotencyKey returns the existing review log if idempotency key was already used.
-func (r *Repository) CheckIdempotencyKey(ctx context.Context, key string) (*ReviewLogEntry, error) {
+// CheckIdempotencyKey returns the existing review log if idempotency key was already used by this user.
+func (r *Repository) CheckIdempotencyKey(ctx context.Context, userID, key string) (*ReviewLogEntry, error) {
 	var entry ReviewLogEntry
 	var reviewedAt string
 	var responseMs sql.NullInt64
@@ -170,7 +170,7 @@ func (r *Repository) CheckIdempotencyKey(ctx context.Context, key string) (*Revi
 	err := r.db.QueryRowContext(ctx, `
 		SELECT id, user_id, card_id, user_card_state_id, rating, response_ms,
 			   state_before, state_after, client_event_id, idempotency_key, reviewed_at
-		FROM review_logs WHERE idempotency_key = ?`, key,
+		FROM review_logs WHERE idempotency_key = ? AND user_id = ?`, key, userID,
 	).Scan(
 		&entry.ID, &entry.UserID, &entry.CardID, &entry.UserCardStateID,
 		&entry.Rating, &responseMs,

@@ -68,7 +68,7 @@ type SubmitResult struct {
 func (s *Service) SubmitReview(ctx context.Context, input SubmitInput) (*SubmitResult, error) {
 	// Check idempotency
 	if input.IdempotencyKey != "" {
-		existing, err := s.repo.CheckIdempotencyKey(ctx, input.IdempotencyKey)
+		existing, err := s.repo.CheckIdempotencyKey(ctx, input.UserID, input.IdempotencyKey)
 		if err == nil && existing != nil {
 			// Parse state_after for cached result
 			var after map[string]any
@@ -92,13 +92,18 @@ func (s *Service) SubmitReview(ctx context.Context, input SubmitInput) (*SubmitR
 		}
 	}
 
-	// Get current card state
-	cardState, err := s.repo.GetUserCardState(ctx, input.UserCardStateID)
+	// Get current card state (scoped by user_id for ownership verification)
+	cardState, err := s.repo.GetUserCardState(ctx, input.UserCardStateID, input.UserID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrCardStateNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("get card state: %w", err)
+	}
+
+	// Verify card_id matches the state record
+	if cardState.CardID != input.CardID {
+		return nil, ErrCardStateNotFound
 	}
 
 	// Build FSRS input
@@ -115,7 +120,11 @@ func (s *Service) SubmitReview(ctx context.Context, input SubmitInput) (*SubmitR
 		fsrsState.LastReviewAt = cardState.LastReviewAt.Time
 	}
 
-	result := s.fsrs.Schedule(fsrsState, scheduler.Rating(input.Rating), input.ReviewedAt)
+	// Use server time as source of truth for scheduling (doc/05 section 7.1).
+	// Client reviewed_at is stored in review_logs for audit only.
+	now := time.Now().UTC()
+
+	result := s.fsrs.Schedule(fsrsState, scheduler.Rating(input.Rating), now)
 
 	// Serialize state snapshots
 	stateBefore, _ := json.Marshal(map[string]any{
@@ -165,7 +174,7 @@ func (s *Service) SubmitReview(ctx context.Context, input SubmitInput) (*SubmitR
 		string(result.Status), result.DueAt,
 		result.Reps, result.Lapses, result.ScheduledDays, result.ElapsedDays,
 		result.Stability, result.Difficulty,
-		input.ReviewedAt,
+		now,
 	); err != nil {
 		return nil, fmt.Errorf("update card state: %w", err)
 	}
