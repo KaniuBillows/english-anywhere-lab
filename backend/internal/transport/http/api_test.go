@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -35,12 +36,18 @@ type testEnv struct {
 func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
 
-	database, err := sql.Open("sqlite", ":memory:")
+	// Use a named shared-cache in-memory DB so all connections from the pool
+	// see the same database. Each test gets a unique name to avoid interference.
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())
+	database, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
 	if _, err := database.Exec("PRAGMA foreign_keys = ON"); err != nil {
 		t.Fatalf("enable foreign keys: %v", err)
+	}
+	if _, err := database.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		t.Fatalf("set busy timeout: %v", err)
 	}
 	if err := db.Migrate(database); err != nil {
 		t.Fatalf("migrate: %v", err)
@@ -699,4 +706,114 @@ func TestAPI(t *testing.T) {
 			}
 		})
 	})
+}
+
+// ==================== Concurrency Race Tests ====================
+
+// TestReviewSubmitRace fires N concurrent review submissions with the same
+// idempotency key. All must return 200 (no 500), and exactly one real insert
+// should occur (the rest are idempotent replays).
+func TestReviewSubmitRace(t *testing.T) {
+	env := newTestEnv(t)
+
+	auth := env.registerUser(t, "race-review@test.com", "securepassword123")
+	token := auth.Tokens.AccessToken
+	userID := auth.User.ID
+
+	cards := env.seedReviewData(t, userID, 1)
+	card := cards[0]
+
+	idempotencyKey := uuid.New().String()
+	clientEventID := uuid.New().String()
+
+	const goroutines = 10
+	var wg sync.WaitGroup
+	statuses := make([]int, goroutines)
+
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			resp := env.doRequest(t, "POST", "/api/v1/reviews/submit", token, map[string]any{
+				"card_id":            card.CardID,
+				"user_card_state_id": card.StateID,
+				"rating":             "good",
+				"reviewed_at":        time.Now().UTC().Format(time.RFC3339),
+				"client_event_id":    clientEventID,
+			}, map[string]string{
+				"Idempotency-Key": idempotencyKey,
+			})
+			defer resp.Body.Close()
+			io.ReadAll(resp.Body) // drain
+			statuses[idx] = resp.StatusCode
+		}(i)
+	}
+	wg.Wait()
+
+	for i, code := range statuses {
+		if code != http.StatusOK {
+			t.Errorf("goroutine %d: expected 200, got %d", i, code)
+		}
+	}
+
+	// Verify exactly 1 review log was inserted
+	var count int
+	err := env.db.QueryRow(
+		"SELECT COUNT(*) FROM review_logs WHERE idempotency_key = ?", idempotencyKey,
+	).Scan(&count)
+	if err != nil {
+		t.Fatalf("count review logs: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly 1 review_log row, got %d", count)
+	}
+}
+
+// TestBootstrapPlanRace fires N concurrent bootstrap requests for the same user.
+// Exactly one should succeed with 200; all others must get 409 (no 500).
+func TestBootstrapPlanRace(t *testing.T) {
+	env := newTestEnv(t)
+
+	auth := env.registerUser(t, "race-plan@test.com", "securepassword123")
+	token := auth.Tokens.AccessToken
+
+	const goroutines = 10
+	var wg sync.WaitGroup
+	statuses := make([]int, goroutines)
+
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			resp := env.doRequest(t, "POST", "/api/v1/plans/bootstrap", token, map[string]any{
+				"level":         "B1",
+				"target_domain": "general",
+				"daily_minutes": 20,
+			}, nil)
+			defer resp.Body.Close()
+			io.ReadAll(resp.Body) // drain
+			statuses[idx] = resp.StatusCode
+		}(i)
+	}
+	wg.Wait()
+
+	okCount := 0
+	conflictCount := 0
+	for i, code := range statuses {
+		switch code {
+		case http.StatusOK:
+			okCount++
+		case http.StatusConflict:
+			conflictCount++
+		default:
+			t.Errorf("goroutine %d: unexpected status %d", i, code)
+		}
+	}
+
+	if okCount != 1 {
+		t.Errorf("expected exactly 1 success (200), got %d", okCount)
+	}
+	if conflictCount != goroutines-1 {
+		t.Errorf("expected %d conflicts (409), got %d", goroutines-1, conflictCount)
+	}
 }
