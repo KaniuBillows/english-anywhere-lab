@@ -1,0 +1,90 @@
+package http
+
+import (
+	nethttp "net/http"
+
+	"github.com/go-chi/chi/v5"
+	chimw "github.com/go-chi/chi/v5/middleware"
+
+	"github.com/bennyshi/english-anywhere-lab/internal/app"
+	"github.com/bennyshi/english-anywhere-lab/internal/auth"
+	"github.com/bennyshi/english-anywhere-lab/internal/plan"
+	"github.com/bennyshi/english-anywhere-lab/internal/progress"
+	"github.com/bennyshi/english-anywhere-lab/internal/review"
+	"github.com/bennyshi/english-anywhere-lab/internal/transport/http/handler"
+	"github.com/bennyshi/english-anywhere-lab/internal/transport/http/middleware"
+)
+
+func NewRouter(
+	application *app.App,
+	authSvc *auth.Service,
+	jwtMgr *auth.JWTManager,
+	reviewSvc *review.Service,
+	planSvc *plan.Service,
+	progressSvc *progress.Service,
+) *chi.Mux {
+	r := chi.NewRouter()
+
+	// Global middleware
+	r.Use(chimw.RequestID)
+	r.Use(chimw.RealIP)
+	r.Use(chimw.Logger)
+	r.Use(chimw.Recoverer)
+	r.Use(corsMiddleware)
+
+	// Health check
+	r.Get("/health", handler.Health)
+
+	// API v1
+	r.Route("/api/v1", func(r chi.Router) {
+		// Public auth routes
+		authH := handler.NewAuthHandler(authSvc)
+		r.Post("/auth/register", authH.Register)
+		r.Post("/auth/login", authH.Login)
+		r.Post("/auth/refresh", authH.Refresh)
+
+		// Protected routes
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Auth(jwtMgr))
+
+			// Profile
+			profileH := handler.NewProfileHandler(authSvc)
+			r.Get("/me", profileH.GetMe)
+			r.Patch("/me/profile", profileH.UpdateProfile)
+
+			// Review
+			reviewH := handler.NewReviewHandler(reviewSvc)
+			r.Get("/reviews/queue", reviewH.GetQueue)
+			r.Post("/reviews/submit", reviewH.Submit)
+
+			// Plan
+			planH := handler.NewPlanHandler(planSvc)
+			r.Post("/plans/bootstrap", planH.Bootstrap)
+			r.Get("/plans/today", planH.GetToday)
+			r.Post("/plans/{plan_id}/tasks/{task_id}/complete", planH.CompleteTask)
+
+			// Progress
+			progressH := handler.NewProgressHandler(progressSvc)
+			r.Get("/progress/summary", progressH.GetSummary)
+			r.Get("/progress/daily", progressH.GetDaily)
+		})
+	})
+
+	return r
+}
+
+func corsMiddleware(next nethttp.Handler) nethttp.Handler {
+	return nethttp.HandlerFunc(func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, Idempotency-Key")
+		w.Header().Set("Access-Control-Max-Age", "3600")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(nethttp.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}

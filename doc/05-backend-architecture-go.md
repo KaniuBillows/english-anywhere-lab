@@ -94,7 +94,7 @@ english-anywhere-lab/
 ### 7.1 复习提交链路
 1. 客户端提交评分（携带 `idempotency_key`）。
 2. `review` 模块校验卡片状态与并发版本。
-3. `scheduler` 计算新间隔与下次到期。
+3. `scheduler` 使用服务端接收时间计算新间隔与下次到期（客户端 `reviewed_at` 仅审计）。
 4. 写入 `review_logs` 与 `user_card_states`。
 5. 触发 `progress_daily` 异步更新任务。
 

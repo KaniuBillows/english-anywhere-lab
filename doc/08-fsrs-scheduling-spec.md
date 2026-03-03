@@ -61,6 +61,14 @@
 - 计算“今天学习”时，按用户时区和 `day_cutoff_hour=04` 划分。
 - 同一用户跨设备必须使用相同 day cutoff。
 
+### 6.5 时间真值（M1 必须）
+- 调度计算使用服务端时间 `server_received_at` 作为 `now`。
+- 客户端上报 `reviewed_at` 只用于审计、离线重放排序、问题排查。
+- 客户端时间与服务端时间偏差超过阈值（建议 5 分钟）时：
+  - 仍以服务端时间计算 `next_due_at`。
+  - 记录告警字段（如 `client_time_drift_sec`）供监控分析。
+- 服务端不得信任客户端时间直接驱动间隔计算。
+
 ## 7. 幂等与一致性
 
 ### 7.1 幂等键
@@ -79,6 +87,7 @@
 - 输入：`card_id`, `user_card_state_id`, `rating`, `reviewed_at`
 - 输出：`next_due_at`, `scheduled_days`, `status`
 - 服务端不得信任客户端提交的 `scheduled_days`
+- 服务端调度 `next_due_at` 时必须使用 `server_received_at`，不是客户端 `reviewed_at`。
 
 ## 9. 监控指标
 - `review_submit_success_rate`
@@ -104,6 +113,10 @@
 ### Case D：跨日切边界
 - 输入：用户时区 `Asia/Shanghai`, 提交时间 `03:30` 与 `04:30`
 - 预期：归属不同学习日
+
+### Case E：客户端时间漂移
+- 输入：客户端 `reviewed_at` 比服务端慢 2 小时
+- 预期：`next_due_at` 仍由服务端时间计算，且记录漂移审计字段
 
 ## 11. 未来演进
 - 引入个体化参数训练（基于历史日志拟合）

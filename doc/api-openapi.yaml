@@ -3,8 +3,9 @@ info:
   title: English Anywhere Lab API
   version: 0.1.0
   description: |
-    MVP API contract for English Anywhere Lab.
+    Full roadmap API contract for English Anywhere Lab.
     Base path is /api/v1.
+    For M1 implementation and acceptance, use doc/07-openapi-m1.yaml as source of truth.
 servers:
   - url: /api/v1
 tags:

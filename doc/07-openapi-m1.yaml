@@ -1,27 +1,27 @@
+---
 openapi: 3.0.3
 info:
   title: English Anywhere Lab API
   version: 0.1.0
   description: |
-    Full roadmap API contract for English Anywhere Lab.
+    M1 implementation contract for English Anywhere Lab.
     Base path is /api/v1.
-    For M1 implementation and acceptance, use doc/07-openapi-m1.yaml as source of truth.
+    This file is the source of truth for M1 backend/frontend acceptance.
 servers:
-  - url: /api/v1
+- url: "/api/v1"
 tags:
-  - name: Auth
-  - name: Profile
-  - name: Plan
-  - name: Review
-  - name: Pack
-  - name: Progress
-  - name: Sync
+- name: Auth
+- name: Profile
+- name: Plan
+- name: Review
+- name: Progress
 security:
-  - bearerAuth: []
+- bearerAuth: []
 paths:
-  /auth/register:
+  "/auth/register":
     post:
-      tags: [Auth]
+      tags:
+      - Auth
       summary: Register a user
       operationId: register
       security: []
@@ -30,21 +30,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RegisterRequest'
+              "$ref": "#/components/schemas/RegisterRequest"
       responses:
         '201':
           description: Registered
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
+                "$ref": "#/components/schemas/AuthResponse"
         '400':
-          $ref: '#/components/responses/BadRequest'
+          "$ref": "#/components/responses/BadRequest"
         '409':
-          $ref: '#/components/responses/Conflict'
-  /auth/login:
+          "$ref": "#/components/responses/Conflict"
+  "/auth/login":
     post:
-      tags: [Auth]
+      tags:
+      - Auth
       summary: Login with email and password
       operationId: login
       security: []
@@ -53,19 +54,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LoginRequest'
+              "$ref": "#/components/schemas/LoginRequest"
       responses:
         '200':
           description: Logged in
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthResponse'
+                "$ref": "#/components/schemas/AuthResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
-  /auth/refresh:
+          "$ref": "#/components/responses/Unauthorized"
+  "/auth/refresh":
     post:
-      tags: [Auth]
+      tags:
+      - Auth
       summary: Refresh access token
       operationId: refreshToken
       security: []
@@ -74,20 +76,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RefreshRequest'
+              "$ref": "#/components/schemas/RefreshRequest"
       responses:
         '200':
           description: Refreshed
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthTokens'
+                "$ref": "#/components/schemas/AuthTokens"
         '401':
-          $ref: '#/components/responses/Unauthorized'
-
-  /me:
+          "$ref": "#/components/responses/Unauthorized"
+  "/me":
     get:
-      tags: [Profile]
+      tags:
+      - Profile
       summary: Get current user
       operationId: getMe
       responses:
@@ -96,13 +98,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MeResponse'
+                "$ref": "#/components/schemas/MeResponse"
         '401':
-          $ref: '#/components/responses/Unauthorized'
-
-  /me/profile:
+          "$ref": "#/components/responses/Unauthorized"
+  "/me/profile":
     patch:
-      tags: [Profile]
+      tags:
+      - Profile
       summary: Update learning profile
       operationId: updateProfile
       requestBody:
@@ -110,20 +112,20 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateProfileRequest'
+              "$ref": "#/components/schemas/UpdateProfileRequest"
       responses:
         '200':
           description: Updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MeResponse'
+                "$ref": "#/components/schemas/MeResponse"
         '400':
-          $ref: '#/components/responses/BadRequest'
-
-  /plans/bootstrap:
+          "$ref": "#/components/responses/BadRequest"
+  "/plans/bootstrap":
     post:
-      tags: [Plan]
+      tags:
+      - Plan
       summary: Bootstrap the first weekly plan
       operationId: bootstrapPlan
       requestBody:
@@ -131,317 +133,158 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/BootstrapPlanRequest'
+              "$ref": "#/components/schemas/BootstrapPlanRequest"
       responses:
         '200':
           description: Plan generated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WeeklyPlanResponse'
+                "$ref": "#/components/schemas/WeeklyPlanResponse"
         '400':
-          $ref: '#/components/responses/BadRequest'
-
-  /plans/today:
+          "$ref": "#/components/responses/BadRequest"
+  "/plans/today":
     get:
-      tags: [Plan]
+      tags:
+      - Plan
       summary: Get today's learning plan
       operationId: getTodayPlan
       parameters:
-        - in: query
-          name: timezone
-          schema:
-            type: string
-          required: false
+      - in: query
+        name: timezone
+        schema:
+          type: string
+        required: false
       responses:
         '200':
           description: Today plan
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DailyPlanResponse'
-
-  /plans/{plan_id}/tasks/{task_id}/complete:
+                "$ref": "#/components/schemas/DailyPlanResponse"
+  "/plans/{plan_id}/tasks/{task_id}/complete":
     post:
-      tags: [Plan]
+      tags:
+      - Plan
       summary: Mark task completed
       operationId: completeTask
       parameters:
-        - $ref: '#/components/parameters/PlanId'
-        - $ref: '#/components/parameters/TaskId'
+      - "$ref": "#/components/parameters/PlanId"
+      - "$ref": "#/components/parameters/TaskId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CompleteTaskRequest'
+              "$ref": "#/components/schemas/CompleteTaskRequest"
       responses:
         '200':
           description: Completed
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TaskCompletionResponse'
-
-  /reviews/queue:
+                "$ref": "#/components/schemas/TaskCompletionResponse"
+  "/reviews/queue":
     get:
-      tags: [Review]
+      tags:
+      - Review
       summary: Get due review cards
       operationId: getReviewQueue
       parameters:
-        - in: query
-          name: limit
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 200
-            default: 30
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 30
       responses:
         '200':
           description: Review queue
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReviewQueueResponse'
-
-  /reviews/submit:
+                "$ref": "#/components/schemas/ReviewQueueResponse"
+  "/reviews/submit":
     post:
-      tags: [Review]
+      tags:
+      - Review
       summary: Submit one review result
       operationId: submitReview
       parameters:
-        - in: header
-          name: Idempotency-Key
-          required: true
-          schema:
-            type: string
+      - in: header
+        name: Idempotency-Key
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ReviewSubmitRequest'
+              "$ref": "#/components/schemas/ReviewSubmitRequest"
       responses:
         '200':
-          description: Review accepted
+          description: Review accepted (duplicate Idempotency-Key or client_event_id returns the original result with 200)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ReviewSubmitResponse'
-        '409':
-          description: Duplicate idempotency key accepted as success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ReviewSubmitResponse'
-
-  /packs:
+                "$ref": "#/components/schemas/ReviewSubmitResponse"
+  "/progress/summary":
     get:
-      tags: [Pack]
-      summary: List learning packs
-      operationId: listPacks
-      parameters:
-        - in: query
-          name: domain
-          schema:
-            type: string
-        - in: query
-          name: level
-          schema:
-            $ref: '#/components/schemas/CefrLevel'
-        - in: query
-          name: source
-          schema:
-            type: string
-            enum: [official, ai]
-        - in: query
-          name: page
-          schema:
-            type: integer
-            minimum: 1
-            default: 1
-        - in: query
-          name: page_size
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-      responses:
-        '200':
-          description: Pack list
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PackListResponse'
-
-  /packs/{pack_id}:
-    get:
-      tags: [Pack]
-      summary: Get pack detail
-      operationId: getPackDetail
-      parameters:
-        - $ref: '#/components/parameters/PackId'
-      responses:
-        '200':
-          description: Pack detail
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PackDetailResponse'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /packs/{pack_id}/enroll:
-    post:
-      tags: [Pack]
-      summary: Enroll a pack into current learning plan
-      operationId: enrollPack
-      parameters:
-        - $ref: '#/components/parameters/PackId'
-      responses:
-        '200':
-          description: Enrolled
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenericMessage'
-
-  /packs/generate:
-    post:
-      tags: [Pack]
-      summary: Create AI generation job
-      operationId: createPackGenerationJob
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GeneratePackRequest'
-      responses:
-        '202':
-          description: Job created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenerationJobResponse'
-
-  /packs/generation-jobs/{job_id}:
-    get:
-      tags: [Pack]
-      summary: Get generation job status
-      operationId: getGenerationJob
-      parameters:
-        - $ref: '#/components/parameters/JobId'
-      responses:
-        '200':
-          description: Job detail
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenerationJobResponse'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /progress/summary:
-    get:
-      tags: [Progress]
+      tags:
+      - Progress
       summary: Get progress summary
       operationId: getProgressSummary
       parameters:
-        - in: query
-          name: range
-          required: true
-          schema:
-            type: string
-            enum: [7d, 30d, 90d]
+      - in: query
+        name: range
+        required: true
+        schema:
+          type: string
+          enum:
+          - 7d
+          - 30d
+          - 90d
       responses:
         '200':
           description: Summary
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProgressSummaryResponse'
-
-  /progress/daily:
+                "$ref": "#/components/schemas/ProgressSummaryResponse"
+  "/progress/daily":
     get:
-      tags: [Progress]
+      tags:
+      - Progress
       summary: Get daily progress series
       operationId: getProgressDaily
       parameters:
-        - in: query
-          name: from
-          required: true
-          schema:
-            type: string
-            format: date
-        - in: query
-          name: to
-          required: true
-          schema:
-            type: string
-            format: date
+      - in: query
+        name: from
+        required: true
+        schema:
+          type: string
+          format: date
+      - in: query
+        name: to
+        required: true
+        schema:
+          type: string
+          format: date
       responses:
         '200':
           description: Daily data
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProgressDailyResponse'
-
-  /sync/events:
-    post:
-      tags: [Sync]
-      summary: Push offline events with idempotency
-      operationId: pushSyncEvents
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SyncEventsRequest'
-      responses:
-        '200':
-          description: Ack statuses per event
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncEventsResponse'
-
-  /sync/changes:
-    get:
-      tags: [Sync]
-      summary: Pull server-side changes since cursor
-      operationId: pullSyncChanges
-      parameters:
-        - in: query
-          name: cursor
-          required: false
-          schema:
-            type: string
-        - in: query
-          name: limit
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 500
-            default: 200
-      responses:
-        '200':
-          description: Server change set
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncChangesResponse'
-
+                "$ref": "#/components/schemas/ProgressDailyResponse"
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-
   parameters:
     PlanId:
       in: path
@@ -471,45 +314,48 @@ components:
       schema:
         type: string
         format: uuid
-
   responses:
     BadRequest:
       description: Bad request
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            "$ref": "#/components/schemas/ErrorResponse"
     Unauthorized:
       description: Unauthorized
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            "$ref": "#/components/schemas/ErrorResponse"
     NotFound:
       description: Not found
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            "$ref": "#/components/schemas/ErrorResponse"
     Conflict:
       description: Conflict
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
-
+            "$ref": "#/components/schemas/ErrorResponse"
   schemas:
     CefrLevel:
       type: string
-      enum: [A1, A2, B1, B2, C1, C2]
-
+      enum:
+      - A1
+      - A2
+      - B1
+      - B2
+      - C1
+      - C2
     GenericMessage:
       type: object
       properties:
         message:
           type: string
-      required: [message]
-
+      required:
+      - message
     ErrorResponse:
       type: object
       properties:
@@ -520,8 +366,9 @@ components:
         details:
           type: object
           additionalProperties: true
-      required: [code, message]
-
+      required:
+      - code
+      - message
     User:
       type: object
       properties:
@@ -535,21 +382,27 @@ components:
           type: string
         timezone:
           type: string
-      required: [id, email, locale, timezone]
-
+      required:
+      - id
+      - email
+      - locale
+      - timezone
     UserLearningProfile:
       type: object
       properties:
         current_level:
-          $ref: '#/components/schemas/CefrLevel'
+          "$ref": "#/components/schemas/CefrLevel"
         target_domain:
           type: string
         daily_minutes:
           type: integer
         weekly_goal_days:
           type: integer
-      required: [current_level, target_domain, daily_minutes, weekly_goal_days]
-
+      required:
+      - current_level
+      - target_domain
+      - daily_minutes
+      - weekly_goal_days
     RegisterRequest:
       type: object
       properties:
@@ -565,8 +418,9 @@ components:
         timezone:
           type: string
           default: Asia/Shanghai
-      required: [email, password]
-
+      required:
+      - email
+      - password
     LoginRequest:
       type: object
       properties:
@@ -575,15 +429,16 @@ components:
           format: email
         password:
           type: string
-      required: [email, password]
-
+      required:
+      - email
+      - password
     RefreshRequest:
       type: object
       properties:
         refresh_token:
           type: string
-      required: [refresh_token]
-
+      required:
+      - refresh_token
     AuthTokens:
       type: object
       properties:
@@ -593,31 +448,35 @@ components:
           type: string
         expires_in:
           type: integer
-      required: [access_token, refresh_token, expires_in]
-
+      required:
+      - access_token
+      - refresh_token
+      - expires_in
     AuthResponse:
       type: object
       properties:
         user:
-          $ref: '#/components/schemas/User'
+          "$ref": "#/components/schemas/User"
         tokens:
-          $ref: '#/components/schemas/AuthTokens'
-      required: [user, tokens]
-
+          "$ref": "#/components/schemas/AuthTokens"
+      required:
+      - user
+      - tokens
     MeResponse:
       type: object
       properties:
         user:
-          $ref: '#/components/schemas/User'
+          "$ref": "#/components/schemas/User"
         learning_profile:
-          $ref: '#/components/schemas/UserLearningProfile'
-      required: [user, learning_profile]
-
+          "$ref": "#/components/schemas/UserLearningProfile"
+      required:
+      - user
+      - learning_profile
     UpdateProfileRequest:
       type: object
       properties:
         current_level:
-          $ref: '#/components/schemas/CefrLevel'
+          "$ref": "#/components/schemas/CefrLevel"
         target_domain:
           type: string
         daily_minutes:
@@ -628,12 +487,11 @@ components:
           type: integer
           minimum: 1
           maximum: 7
-
     BootstrapPlanRequest:
       type: object
       properties:
         level:
-          $ref: '#/components/schemas/CefrLevel'
+          "$ref": "#/components/schemas/CefrLevel"
         target_domain:
           type: string
         daily_minutes:
@@ -645,8 +503,10 @@ components:
           minimum: 3
           maximum: 14
           default: 7
-      required: [level, target_domain, daily_minutes]
-
+      required:
+      - level
+      - target_domain
+      - daily_minutes
     PlanTask:
       type: object
       properties:
@@ -655,16 +515,27 @@ components:
           format: uuid
         task_type:
           type: string
-          enum: [input, retrieval_quiz, review, output]
+          enum:
+          - input
+          - retrieval_quiz
+          - review
+          - output
         title:
           type: string
         status:
           type: string
-          enum: [pending, in_progress, completed]
+          enum:
+          - pending
+          - in_progress
+          - completed
         estimated_minutes:
           type: integer
-      required: [task_id, task_type, title, status, estimated_minutes]
-
+      required:
+      - task_id
+      - task_type
+      - title
+      - status
+      - estimated_minutes
     DailyPlan:
       type: object
       properties:
@@ -676,22 +547,28 @@ components:
           format: date
         mode:
           type: string
-          enum: [fast_10m, full_20m]
+          enum:
+          - fast_10m
+          - full_20m
         total_estimated_minutes:
           type: integer
         tasks:
           type: array
           items:
-            $ref: '#/components/schemas/PlanTask'
-      required: [plan_id, date, mode, total_estimated_minutes, tasks]
-
+            "$ref": "#/components/schemas/PlanTask"
+      required:
+      - plan_id
+      - date
+      - mode
+      - total_estimated_minutes
+      - tasks
     DailyPlanResponse:
       type: object
       properties:
         daily_plan:
-          $ref: '#/components/schemas/DailyPlan'
-      required: [daily_plan]
-
+          "$ref": "#/components/schemas/DailyPlan"
+      required:
+      - daily_plan
     WeeklyPlanResponse:
       type: object
       properties:
@@ -701,9 +578,10 @@ components:
         daily_plans:
           type: array
           items:
-            $ref: '#/components/schemas/DailyPlan'
-      required: [week_start, daily_plans]
-
+            "$ref": "#/components/schemas/DailyPlan"
+      required:
+      - week_start
+      - daily_plans
     CompleteTaskRequest:
       type: object
       properties:
@@ -713,8 +591,8 @@ components:
         duration_seconds:
           type: integer
           minimum: 0
-      required: [completed_at]
-
+      required:
+      - completed_at
     TaskCompletionResponse:
       type: object
       properties:
@@ -723,11 +601,13 @@ components:
           format: uuid
         status:
           type: string
-          enum: [completed]
+          enum:
+          - completed
         next_recommendation:
           type: string
-      required: [task_id, status]
-
+      required:
+      - task_id
+      - status
     ReviewCard:
       type: object
       properties:
@@ -746,8 +626,12 @@ components:
         due_at:
           type: string
           format: date-time
-      required: [card_id, user_card_state_id, front_text, back_text, due_at]
-
+      required:
+      - card_id
+      - user_card_state_id
+      - front_text
+      - back_text
+      - due_at
     ReviewQueueResponse:
       type: object
       properties:
@@ -756,9 +640,10 @@ components:
         cards:
           type: array
           items:
-            $ref: '#/components/schemas/ReviewCard'
-      required: [due_count, cards]
-
+            "$ref": "#/components/schemas/ReviewCard"
+      required:
+      - due_count
+      - cards
     ReviewSubmitRequest:
       type: object
       properties:
@@ -770,7 +655,11 @@ components:
           format: uuid
         rating:
           type: string
-          enum: [again, hard, good, easy]
+          enum:
+          - again
+          - hard
+          - good
+          - easy
         reviewed_at:
           type: string
           format: date-time
@@ -780,8 +669,12 @@ components:
         client_event_id:
           type: string
           format: uuid
-      required: [card_id, user_card_state_id, rating, reviewed_at, client_event_id]
-
+      required:
+      - card_id
+      - user_card_state_id
+      - rating
+      - reviewed_at
+      - client_event_id
     ReviewSubmitResponse:
       type: object
       properties:
@@ -797,9 +690,16 @@ components:
           type: integer
         status:
           type: string
-          enum: [learning, review, relearning]
-      required: [accepted, card_id, next_due_at, scheduled_days, status]
-
+          enum:
+          - learning
+          - review
+          - relearning
+      required:
+      - accepted
+      - card_id
+      - next_due_at
+      - scheduled_days
+      - status
     Pack:
       type: object
       properties:
@@ -808,7 +708,9 @@ components:
           format: uuid
         source:
           type: string
-          enum: [official, ai]
+          enum:
+          - official
+          - ai
         title:
           type: string
         description:
@@ -816,31 +718,39 @@ components:
         domain:
           type: string
         level:
-          $ref: '#/components/schemas/CefrLevel'
+          "$ref": "#/components/schemas/CefrLevel"
         estimated_minutes:
           type: integer
-      required: [id, source, title, domain, level, estimated_minutes]
-
+      required:
+      - id
+      - source
+      - title
+      - domain
+      - level
+      - estimated_minutes
     PackListResponse:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/Pack'
+            "$ref": "#/components/schemas/Pack"
         page:
           type: integer
         page_size:
           type: integer
         total:
           type: integer
-      required: [items, page, page_size, total]
-
+      required:
+      - items
+      - page
+      - page_size
+      - total
     PackDetailResponse:
       type: object
       properties:
         pack:
-          $ref: '#/components/schemas/Pack'
+          "$ref": "#/components/schemas/Pack"
         lessons:
           type: array
           items:
@@ -853,17 +763,27 @@ components:
                 type: string
               lesson_type:
                 type: string
-                enum: [reading, listening, speaking, writing, mixed]
+                enum:
+                - reading
+                - listening
+                - speaking
+                - writing
+                - mixed
               position:
                 type: integer
-            required: [lesson_id, title, lesson_type, position]
-      required: [pack, lessons]
-
+            required:
+            - lesson_id
+            - title
+            - lesson_type
+            - position
+      required:
+      - pack
+      - lessons
     GeneratePackRequest:
       type: object
       properties:
         level:
-          $ref: '#/components/schemas/CefrLevel'
+          "$ref": "#/components/schemas/CefrLevel"
         domain:
           type: string
         daily_minutes:
@@ -879,9 +799,15 @@ components:
           type: array
           items:
             type: string
-            enum: [listening, speaking, reading, writing]
-      required: [level, domain, daily_minutes]
-
+            enum:
+            - listening
+            - speaking
+            - reading
+            - writing
+      required:
+      - level
+      - domain
+      - daily_minutes
     GenerationJobResponse:
       type: object
       properties:
@@ -890,7 +816,11 @@ components:
           format: uuid
         status:
           type: string
-          enum: [queued, running, success, failed]
+          enum:
+          - queued
+          - running
+          - success
+          - failed
         created_at:
           type: string
           format: date-time
@@ -905,8 +835,10 @@ components:
         error_message:
           type: string
           nullable: true
-      required: [job_id, status, created_at]
-
+      required:
+      - job_id
+      - status
+      - created_at
     ProgressSummaryResponse:
       type: object
       properties:
@@ -923,8 +855,13 @@ components:
           type: integer
         streak_count:
           type: integer
-      required: [range, total_minutes, active_days, review_accuracy, cards_reviewed, streak_count]
-
+      required:
+      - range
+      - total_minutes
+      - active_days
+      - review_accuracy
+      - cards_reviewed
+      - streak_count
     ProgressDailyPoint:
       type: object
       properties:
@@ -938,17 +875,19 @@ components:
         review_accuracy:
           type: number
           format: float
-      required: [date, minutes_learned, cards_reviewed]
-
+      required:
+      - date
+      - minutes_learned
+      - cards_reviewed
     ProgressDailyResponse:
       type: object
       properties:
         points:
           type: array
           items:
-            $ref: '#/components/schemas/ProgressDailyPoint'
-      required: [points]
-
+            "$ref": "#/components/schemas/ProgressDailyPoint"
+      required:
+      - points
     SyncEvent:
       type: object
       properties:
@@ -957,15 +896,22 @@ components:
           format: uuid
         event_type:
           type: string
-          enum: [review_submitted, output_submitted, task_completed, profile_updated]
+          enum:
+          - review_submitted
+          - output_submitted
+          - task_completed
+          - profile_updated
         occurred_at:
           type: string
           format: date-time
         payload:
           type: object
           additionalProperties: true
-      required: [client_event_id, event_type, occurred_at, payload]
-
+      required:
+      - client_event_id
+      - event_type
+      - occurred_at
+      - payload
     SyncEventsRequest:
       type: object
       properties:
@@ -973,9 +919,9 @@ components:
           type: array
           maxItems: 500
           items:
-            $ref: '#/components/schemas/SyncEvent'
-      required: [events]
-
+            "$ref": "#/components/schemas/SyncEvent"
+      required:
+      - events
     SyncEventAck:
       type: object
       properties:
@@ -984,23 +930,28 @@ components:
           format: uuid
         status:
           type: string
-          enum: [accepted, duplicate, rejected]
+          enum:
+          - accepted
+          - duplicate
+          - rejected
         reason:
           type: string
           nullable: true
-      required: [client_event_id, status]
-
+      required:
+      - client_event_id
+      - status
     SyncEventsResponse:
       type: object
       properties:
         acks:
           type: array
           items:
-            $ref: '#/components/schemas/SyncEventAck'
+            "$ref": "#/components/schemas/SyncEventAck"
         server_cursor:
           type: string
-      required: [acks, server_cursor]
-
+      required:
+      - acks
+      - server_cursor
     SyncChangesResponse:
       type: object
       properties:
@@ -1017,9 +968,17 @@ components:
                 type: string
               op:
                 type: string
-                enum: [upsert, delete]
+                enum:
+                - upsert
+                - delete
               payload:
                 type: object
                 additionalProperties: true
-            required: [entity_type, entity_id, op, payload]
-      required: [next_cursor, changes]
+            required:
+            - entity_type
+            - entity_id
+            - op
+            - payload
+      required:
+      - next_cursor
+      - changes

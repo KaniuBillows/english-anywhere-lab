@@ -3,9 +3,8 @@ info:
   title: English Anywhere Lab API
   version: 0.1.0
   description: |
-    Full roadmap API contract for English Anywhere Lab.
+    MVP API contract for English Anywhere Lab.
     Base path is /api/v1.
-    For M1 implementation and acceptance, use doc/07-openapi-m1.yaml as source of truth.
 servers:
   - url: /api/v1
 tags:
@@ -13,9 +12,7 @@ tags:
   - name: Profile
   - name: Plan
   - name: Review
-  - name: Pack
   - name: Progress
-  - name: Sync
 security:
   - bearerAuth: []
 paths:
@@ -223,125 +220,11 @@ paths:
               $ref: '#/components/schemas/ReviewSubmitRequest'
       responses:
         '200':
-          description: Review accepted
+          description: Review accepted (duplicate Idempotency-Key or client_event_id returns the original result with 200)
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReviewSubmitResponse'
-        '409':
-          description: Duplicate idempotency key accepted as success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ReviewSubmitResponse'
-
-  /packs:
-    get:
-      tags: [Pack]
-      summary: List learning packs
-      operationId: listPacks
-      parameters:
-        - in: query
-          name: domain
-          schema:
-            type: string
-        - in: query
-          name: level
-          schema:
-            $ref: '#/components/schemas/CefrLevel'
-        - in: query
-          name: source
-          schema:
-            type: string
-            enum: [official, ai]
-        - in: query
-          name: page
-          schema:
-            type: integer
-            minimum: 1
-            default: 1
-        - in: query
-          name: page_size
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-      responses:
-        '200':
-          description: Pack list
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PackListResponse'
-
-  /packs/{pack_id}:
-    get:
-      tags: [Pack]
-      summary: Get pack detail
-      operationId: getPackDetail
-      parameters:
-        - $ref: '#/components/parameters/PackId'
-      responses:
-        '200':
-          description: Pack detail
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PackDetailResponse'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
-  /packs/{pack_id}/enroll:
-    post:
-      tags: [Pack]
-      summary: Enroll a pack into current learning plan
-      operationId: enrollPack
-      parameters:
-        - $ref: '#/components/parameters/PackId'
-      responses:
-        '200':
-          description: Enrolled
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenericMessage'
-
-  /packs/generate:
-    post:
-      tags: [Pack]
-      summary: Create AI generation job
-      operationId: createPackGenerationJob
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GeneratePackRequest'
-      responses:
-        '202':
-          description: Job created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenerationJobResponse'
-
-  /packs/generation-jobs/{job_id}:
-    get:
-      tags: [Pack]
-      summary: Get generation job status
-      operationId: getGenerationJob
-      parameters:
-        - $ref: '#/components/parameters/JobId'
-      responses:
-        '200':
-          description: Job detail
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GenerationJobResponse'
-        '404':
-          $ref: '#/components/responses/NotFound'
 
   /progress/summary:
     get:
@@ -389,52 +272,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProgressDailyResponse'
 
-  /sync/events:
-    post:
-      tags: [Sync]
-      summary: Push offline events with idempotency
-      operationId: pushSyncEvents
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SyncEventsRequest'
-      responses:
-        '200':
-          description: Ack statuses per event
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncEventsResponse'
-
-  /sync/changes:
-    get:
-      tags: [Sync]
-      summary: Pull server-side changes since cursor
-      operationId: pullSyncChanges
-      parameters:
-        - in: query
-          name: cursor
-          required: false
-          schema:
-            type: string
-        - in: query
-          name: limit
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 500
-            default: 200
-      responses:
-        '200':
-          description: Server change set
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SyncChangesResponse'
-
 components:
   securitySchemes:
     bearerAuth:
@@ -453,20 +290,6 @@ components:
     TaskId:
       in: path
       name: task_id
-      required: true
-      schema:
-        type: string
-        format: uuid
-    PackId:
-      in: path
-      name: pack_id
-      required: true
-      schema:
-        type: string
-        format: uuid
-    JobId:
-      in: path
-      name: job_id
       required: true
       schema:
         type: string
@@ -502,13 +325,6 @@ components:
     CefrLevel:
       type: string
       enum: [A1, A2, B1, B2, C1, C2]
-
-    GenericMessage:
-      type: object
-      properties:
-        message:
-          type: string
-      required: [message]
 
     ErrorResponse:
       type: object
@@ -663,6 +479,9 @@ components:
           enum: [pending, in_progress, completed]
         estimated_minutes:
           type: integer
+        virtual:
+          type: boolean
+          description: If true, this task is dynamically injected (e.g. due review cards) and cannot be completed via the complete-task endpoint.
       required: [task_id, task_type, title, status, estimated_minutes]
 
     DailyPlan:
@@ -800,113 +619,6 @@ components:
           enum: [learning, review, relearning]
       required: [accepted, card_id, next_due_at, scheduled_days, status]
 
-    Pack:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        source:
-          type: string
-          enum: [official, ai]
-        title:
-          type: string
-        description:
-          type: string
-        domain:
-          type: string
-        level:
-          $ref: '#/components/schemas/CefrLevel'
-        estimated_minutes:
-          type: integer
-      required: [id, source, title, domain, level, estimated_minutes]
-
-    PackListResponse:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Pack'
-        page:
-          type: integer
-        page_size:
-          type: integer
-        total:
-          type: integer
-      required: [items, page, page_size, total]
-
-    PackDetailResponse:
-      type: object
-      properties:
-        pack:
-          $ref: '#/components/schemas/Pack'
-        lessons:
-          type: array
-          items:
-            type: object
-            properties:
-              lesson_id:
-                type: string
-                format: uuid
-              title:
-                type: string
-              lesson_type:
-                type: string
-                enum: [reading, listening, speaking, writing, mixed]
-              position:
-                type: integer
-            required: [lesson_id, title, lesson_type, position]
-      required: [pack, lessons]
-
-    GeneratePackRequest:
-      type: object
-      properties:
-        level:
-          $ref: '#/components/schemas/CefrLevel'
-        domain:
-          type: string
-        daily_minutes:
-          type: integer
-          minimum: 5
-          maximum: 180
-        days:
-          type: integer
-          minimum: 3
-          maximum: 14
-          default: 7
-        focus_skills:
-          type: array
-          items:
-            type: string
-            enum: [listening, speaking, reading, writing]
-      required: [level, domain, daily_minutes]
-
-    GenerationJobResponse:
-      type: object
-      properties:
-        job_id:
-          type: string
-          format: uuid
-        status:
-          type: string
-          enum: [queued, running, success, failed]
-        created_at:
-          type: string
-          format: date-time
-        finished_at:
-          type: string
-          format: date-time
-          nullable: true
-        pack_id:
-          type: string
-          format: uuid
-          nullable: true
-        error_message:
-          type: string
-          nullable: true
-      required: [job_id, status, created_at]
-
     ProgressSummaryResponse:
       type: object
       properties:
@@ -948,78 +660,3 @@ components:
           items:
             $ref: '#/components/schemas/ProgressDailyPoint'
       required: [points]
-
-    SyncEvent:
-      type: object
-      properties:
-        client_event_id:
-          type: string
-          format: uuid
-        event_type:
-          type: string
-          enum: [review_submitted, output_submitted, task_completed, profile_updated]
-        occurred_at:
-          type: string
-          format: date-time
-        payload:
-          type: object
-          additionalProperties: true
-      required: [client_event_id, event_type, occurred_at, payload]
-
-    SyncEventsRequest:
-      type: object
-      properties:
-        events:
-          type: array
-          maxItems: 500
-          items:
-            $ref: '#/components/schemas/SyncEvent'
-      required: [events]
-
-    SyncEventAck:
-      type: object
-      properties:
-        client_event_id:
-          type: string
-          format: uuid
-        status:
-          type: string
-          enum: [accepted, duplicate, rejected]
-        reason:
-          type: string
-          nullable: true
-      required: [client_event_id, status]
-
-    SyncEventsResponse:
-      type: object
-      properties:
-        acks:
-          type: array
-          items:
-            $ref: '#/components/schemas/SyncEventAck'
-        server_cursor:
-          type: string
-      required: [acks, server_cursor]
-
-    SyncChangesResponse:
-      type: object
-      properties:
-        next_cursor:
-          type: string
-        changes:
-          type: array
-          items:
-            type: object
-            properties:
-              entity_type:
-                type: string
-              entity_id:
-                type: string
-              op:
-                type: string
-                enum: [upsert, delete]
-              payload:
-                type: object
-                additionalProperties: true
-            required: [entity_type, entity_id, op, payload]
-      required: [next_cursor, changes]
