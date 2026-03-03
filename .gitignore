@@ -1,0 +1,30 @@
+# Binaries
+bin/
+*.exe
+
+# Data
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/files/
+backup/
+
+# Environment
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage.out
+coverage.html
+
+# Build
+tmp/
