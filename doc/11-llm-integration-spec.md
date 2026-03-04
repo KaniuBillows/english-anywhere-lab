@@ -141,6 +141,12 @@ func (c *Client) Generate(ctx context.Context, req GenerateRequest) (GenerateRes
 - 再做业务 QC 校验（难度、重复度、字段完整性）。
 - 任一步失败则进入“修复重生成”流程。
 
+类型体系强约束（与 `doc/16-learning-pack-type-system.md` 对齐）：
+- 学习包输出必须包含合法 `pack_template`。
+- 任务级输出必须包含合法 `exercise_type`。
+- 输出任务必须标注 `evaluation_mode`（`objective|rubric|llm_hybrid`）。
+- 模板必选题型覆盖率不达标时，判定为 `LLM_SCHEMA_VIOLATION`。
+
 ## 9. 错误模型
 - `LLM_TIMEOUT`
 - `LLM_RATE_LIMITED`

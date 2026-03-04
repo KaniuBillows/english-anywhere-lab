@@ -7,6 +7,8 @@ info:
     M1 implementation contract for English Anywhere Lab.
     Base path is /api/v1.
     This file is the source of truth for M1 backend/frontend acceptance.
+    Learning-pack taxonomy fields (pack_template/exercise_type/evaluation_mode)
+    are defined in doc/07-openapi.yaml for roadmap phases.
 servers:
 - url: "/api/v1"
 tags:

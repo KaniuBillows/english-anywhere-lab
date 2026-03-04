@@ -21,6 +21,7 @@
 - `doc/14-test-strategy.md`：测试策略与发布门禁
 - `doc/15-tts-selection-offline-cpu.md`：离线 TTS 选型（纯 CPU、本地生成、对象存储落盘）
 - `doc/16-learning-pack-type-system.md`：学习包类型体系（Pack Template + Exercise Type + 组合规则）
+- `doc/17-documentation-coverage-audit.md`：文档覆盖审计与补全清单（定义-契约-落地-验证）
 - `doc/api-openapi-m1.yaml`：`doc/07-openapi-m1.yaml` 的副本，便于 M1 代码生成工具读取
 - `doc/api-openapi.yaml`：`doc/07-openapi.yaml` 的副本，便于后续阶段代码生成工具读取
 
@@ -42,4 +43,5 @@
 15. `doc/14-test-strategy.md`
 16. `doc/15-tts-selection-offline-cpu.md`
 17. `doc/16-learning-pack-type-system.md`
-18. `doc/07-openapi.yaml`（后续阶段参考）
+18. `doc/17-documentation-coverage-audit.md`
+19. `doc/07-openapi.yaml`（后续阶段参考）

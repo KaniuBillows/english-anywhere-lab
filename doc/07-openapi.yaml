@@ -395,7 +395,7 @@ paths:
   /lessons/{lesson_id}/output-tasks:
     get:
       tags: [Output]
-      summary: List writing tasks for a lesson
+      summary: List output tasks for a lesson
       operationId: listOutputTasks
       parameters:
         - $ref: '#/components/parameters/LessonId'
@@ -590,6 +590,54 @@ components:
       type: string
       enum: [A1, A2, B1, B2, C1, C2]
 
+    PackTemplate:
+      type: string
+      enum:
+        - vocab_foundation
+        - scenario_dialog
+        - intensive_listening
+        - reading_comprehension
+        - writing_output
+        - review_booster
+        - speaking_bootcamp
+        - exam_drill
+
+    ExerciseType:
+      type: string
+      enum:
+        - flashcard_recall
+        - picture_naming
+        - audio_cloze
+        - dictation_short
+        - reading_mcq
+        - keyword_match
+        - cloze_word
+        - cloze_sentence
+        - sentence_reorder
+        - error_correction
+        - sentence_rewrite
+        - situational_qa
+        - picture_description
+        - guided_paragraph
+        - free_writing
+        - retell_audio
+
+    EvaluationMode:
+      type: string
+      enum: [objective, rubric, llm_hybrid]
+
+    TaskAssets:
+      type: object
+      properties:
+        image_url:
+          type: string
+          format: uri
+          nullable: true
+        audio_url:
+          type: string
+          format: uri
+          nullable: true
+
     GenericMessage:
       type: object
       properties:
@@ -750,6 +798,12 @@ components:
           enum: [pending, in_progress, completed]
         estimated_minutes:
           type: integer
+        exercise_type:
+          $ref: '#/components/schemas/ExerciseType'
+        evaluation_mode:
+          $ref: '#/components/schemas/EvaluationMode'
+        assets:
+          $ref: '#/components/schemas/TaskAssets'
       required: [task_id, task_type, title, status, estimated_minutes]
 
     DailyPlan:
@@ -902,11 +956,13 @@ components:
           type: string
         domain:
           type: string
+        pack_template:
+          $ref: '#/components/schemas/PackTemplate'
         level:
           $ref: '#/components/schemas/CefrLevel'
         estimated_minutes:
           type: integer
-      required: [id, source, title, domain, level, estimated_minutes]
+      required: [id, source, title, domain, pack_template, level, estimated_minutes]
 
     PackListResponse:
       type: object
@@ -943,6 +999,12 @@ components:
                 enum: [reading, listening, speaking, writing, mixed]
               position:
                 type: integer
+              exercise_types:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseType'
+              output_task_count:
+                type: integer
             required: [lesson_id, title, lesson_type, position]
       required: [pack, lessons]
 
@@ -953,6 +1015,8 @@ components:
           $ref: '#/components/schemas/CefrLevel'
         domain:
           type: string
+        pack_template:
+          $ref: '#/components/schemas/PackTemplate'
         daily_minutes:
           type: integer
           minimum: 5
@@ -967,7 +1031,7 @@ components:
           items:
             type: string
             enum: [listening, speaking, reading, writing]
-      required: [level, domain, daily_minutes]
+      required: [level, domain, pack_template, daily_minutes]
 
     GenerationJobResponse:
       type: object
@@ -1123,6 +1187,10 @@ components:
         task_type:
           type: string
           enum: [reading, listening, speaking, writing, mixed]
+        exercise_type:
+          $ref: '#/components/schemas/ExerciseType'
+        evaluation_mode:
+          $ref: '#/components/schemas/EvaluationMode'
         prompt_text:
           type: string
         reference_answer:
@@ -1130,7 +1198,9 @@ components:
           nullable: true
         level:
           $ref: '#/components/schemas/CefrLevel'
-      required: [id, task_type, prompt_text]
+        assets:
+          $ref: '#/components/schemas/TaskAssets'
+      required: [id, task_type, exercise_type, evaluation_mode, prompt_text]
 
     OutputTaskListResponse:
       type: object

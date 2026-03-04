@@ -1,8 +1,8 @@
-# English Anywhere Lab - PRD（v0.3）
+# English Anywhere Lab - PRD（v0.4）
 
 ## 1. 文档信息
 - 文档类型：产品需求文档（PRD）
-- 版本：v0.3
+- 版本：v0.4
 - 日期：2026-03-04
 - 状态：Draft -> 可进入设计与开发拆分
 
@@ -329,3 +329,4 @@
 - D-005：M1 接口单一真值采用 `doc/07-openapi-m1.yaml`。`doc/07-openapi.yaml` 作为后续阶段的全量路线图契约，不作为 M1 实现验收基线。
 - D-006：复习调度时间以服务端接收时间为准；客户端 `reviewed_at` 仅用于审计和离线重放排序，不直接决定 `next_due_at`。
 - D-007：学习内容类型体系采用 `doc/16-learning-pack-type-system.md` 作为单一真值；`pack_template + exercise_type` 为后端校验、前端渲染、AI 生成与测试验收的共同字段。
+- D-008：文档一致性治理采用 `doc/17-documentation-coverage-audit.md`；需求、契约、实现与测试变更必须同步更新，不允许“实现已改但文档缺失”进入验收。

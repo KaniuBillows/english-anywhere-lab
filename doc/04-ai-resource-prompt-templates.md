@@ -88,6 +88,7 @@ Output JSON schema:
       "output_task": {
         "type": "speaking|writing",
         "exercise_type": "situational_qa|picture_description|guided_paragraph|free_writing|retell_audio",
+        "evaluation_mode": "objective|rubric|llm_hybrid",
         "prompt": "string",
         "rubric": ["string"]
       }
@@ -98,6 +99,7 @@ Output JSON schema:
 Hard constraints:
 - For {{level}}, keep reading_text within reasonable complexity.
 - `exercise_type` must be within {{allowed_exercise_types}}.
+- `evaluation_mode` is required for each output task.
 - Each lesson must include 8-12 key vocab items.
 - Each lesson must include 12-20 srs_cards.
 - Output task must be scenario-based and domain-specific.

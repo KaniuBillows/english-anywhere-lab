@@ -9,7 +9,7 @@
 - 单体优先：先用模块化单体（Modular Monolith），避免过早微服务化。
 - 低成本优先：默认单机部署即可运行全链路。
 - 强契约优先：前后端通过 OpenAPI 契约并行开发。
-- 可替换优先：数据库、对象存储、LLM provider 均通过接口抽象实现。
+- 可替换优先：数据库、对象存储、LLM provider、TTS provider 均通过接口抽象实现。
 
 ## 3. 总体拓扑
 ```mermaid
@@ -24,6 +24,7 @@ graph TD
     W --> DB
     W --> OBJ
     W --> LLM[OpenAI-compatible LLM API]
+    W --> TTS[TTS Provider\nCPU Offline]
 
     CRON[Cron Scheduler] --> Q
 ```
@@ -58,6 +59,7 @@ english-anywhere-lab/
     plan/
     review/
     pack/
+    tts/
     progress/
     sync/
     llm/
@@ -83,6 +85,7 @@ english-anywhere-lab/
 - `review`：复习队列、评分提交、状态推进。
 - `scheduler`：FSRS 调度与策略参数。
 - `pack`：学习包查询、AI 生成任务发起与写库。
+- `tts`：离线音频生成、对象存储落盘、`cards.audio_url` 回填。
 - `sync`：离线事件上报与冲突处理。
 - `progress`：聚合统计、周报月报。
 - `llm`：统一 LLM provider 适配层。
@@ -105,6 +108,13 @@ english-anywhere-lab/
 4. 做 JSON Schema 校验 + QC 校验。
 5. 成功则入库 `resource_packs/lessons/cards/output_tasks`。
 6. 任务置 `success` 并返回结果。
+
+### 7.3 TTS 生成链路（离线 CPU）
+1. `pack/cards` 成功入库后，创建 `tts generation` 任务。
+2. Worker 拉取任务调用本地 TTS provider（默认 `sherpa_onnx`）。
+3. 生成音频并写入对象存储（`local|s3`）。
+4. 回写 `cards.audio_url`（或对应媒体字段），并记录任务状态。
+5. 同文本同参数命中去重键时直接复用已有对象。
 
 ## 8. 配置规范（核心）
 
@@ -145,6 +155,17 @@ english-anywhere-lab/
 - `LLM_TIMEOUT_SEC=60`
 - `LLM_MAX_RETRIES=2`
 
+### 8.6 TTS 配置
+- `TTS_ENABLED=true|false`
+- `TTS_PROVIDER=sherpa_onnx|piper_cli`
+- `TTS_MODEL_DIR=./models/tts/en`
+- `TTS_VOICE=en_default_female`
+- `TTS_SAMPLE_RATE=22050`
+- `TTS_SPEED=1.0`
+- `TTS_OUTPUT_FORMAT=wav|mp3`
+- `TTS_WORKER_CONCURRENCY=2`
+- `TTS_RETRY_MAX=2`
+
 ## 9. 并发与一致性策略
 - 所有写请求必须支持幂等键。
 - 对关键写操作使用事务（复习提交、计划推进）。
@@ -159,7 +180,7 @@ english-anywhere-lab/
 
 ## 11. 可观测性
 - 日志：结构化 JSON 日志（trace_id, user_id, route, latency_ms）。
-- 指标：请求延迟、错误率、队列积压、任务成功率、LLM 花费。
+- 指标：请求延迟、错误率、队列积压、任务成功率、LLM 花费、TTS 成功率与时延。
 - 追踪：可选 OpenTelemetry（MVP 可先日志 + metrics）。
 
 ## 12. 非功能目标（MVP）
@@ -171,4 +192,5 @@ english-anywhere-lab/
 1. 先按 OpenAPI 生成 handler stub。
 2. 实现 `review` 与 `plan` 两个核心域。
 3. 接入 DB-backed queue 与 `pack generation` 任务。
-4. 最后接入离线同步和周报聚合。
+4. 接入 `tts generation` 与对象存储回填链路。
+5. 最后接入离线同步和周报聚合。
