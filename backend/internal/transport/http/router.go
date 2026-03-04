@@ -8,6 +8,7 @@ import (
 
 	"github.com/bennyshi/english-anywhere-lab/internal/app"
 	"github.com/bennyshi/english-anywhere-lab/internal/auth"
+	"github.com/bennyshi/english-anywhere-lab/internal/pack"
 	"github.com/bennyshi/english-anywhere-lab/internal/plan"
 	"github.com/bennyshi/english-anywhere-lab/internal/progress"
 	"github.com/bennyshi/english-anywhere-lab/internal/review"
@@ -22,6 +23,7 @@ func NewRouter(
 	reviewSvc *review.Service,
 	planSvc *plan.Service,
 	progressSvc *progress.Service,
+	packSvc *pack.Service,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -67,6 +69,14 @@ func NewRouter(
 			progressH := handler.NewProgressHandler(progressSvc)
 			r.Get("/progress/summary", progressH.GetSummary)
 			r.Get("/progress/daily", progressH.GetDaily)
+
+			// Pack
+			packH := handler.NewPackHandler(packSvc)
+			r.Get("/packs", packH.ListPacks)
+			r.Get("/packs/{pack_id}", packH.GetDetail)
+			r.Post("/packs/{pack_id}/enroll", packH.Enroll)
+			r.Post("/packs/generate", packH.CreateGenerationJob)
+			r.Get("/packs/generation-jobs/{job_id}", packH.GetGenerationJob)
 		})
 	})
 

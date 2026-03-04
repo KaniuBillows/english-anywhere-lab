@@ -11,6 +11,7 @@ import (
 
 	"github.com/bennyshi/english-anywhere-lab/internal/app"
 	"github.com/bennyshi/english-anywhere-lab/internal/auth"
+	"github.com/bennyshi/english-anywhere-lab/internal/pack"
 	"github.com/bennyshi/english-anywhere-lab/internal/plan"
 	"github.com/bennyshi/english-anywhere-lab/internal/progress"
 	"github.com/bennyshi/english-anywhere-lab/internal/review"
@@ -42,7 +43,10 @@ func main() {
 	progressRepo := progress.NewRepository(application.DB)
 	progressSvc := progress.NewService(progressRepo)
 
-	r := router.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc)
+	packRepo := pack.NewRepository(application.DB)
+	packSvc := pack.NewService(packRepo, application.DB)
+
+	r := router.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc, packSvc)
 
 	srv := &http.Server{
 		Addr:         application.Config.HTTPAddr,
