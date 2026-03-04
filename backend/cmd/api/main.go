@@ -53,7 +53,7 @@ func main() {
 	outputRepo := output.NewRepository(application.DB)
 	outputSvc := output.NewService(outputRepo, llmClient)
 
-	r := router.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc, packSvc, outputSvc, filesLocalRoot(application.Config))
+	r := router.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc, packSvc, outputSvc, staticFilesConfig(application.Config))
 
 	srv := &http.Server{
 		Addr:         application.Config.HTTPAddr,
@@ -81,9 +81,12 @@ func main() {
 	srv.Shutdown(ctx)
 }
 
-func filesLocalRoot(cfg *config.Config) string {
+func staticFilesConfig(cfg *config.Config) router.StaticFilesConfig {
 	if cfg.FilesProvider == "local" {
-		return cfg.FilesLocalRoot
+		return router.StaticFilesConfig{
+			Dir:     cfg.FilesLocalRoot,
+			BaseURL: cfg.FilesBaseURL,
+		}
 	}
-	return ""
+	return router.StaticFilesConfig{}
 }

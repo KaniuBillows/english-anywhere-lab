@@ -97,7 +97,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	outputRepo := output.NewRepository(database)
 	outputSvc := output.NewService(outputRepo, &mockLLMCaller{})
 
-	router := httptransport.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc, packSvc, outputSvc, "")
+	router := httptransport.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc, packSvc, outputSvc, httptransport.StaticFilesConfig{})
 	server := httptest.NewServer(router)
 
 	t.Cleanup(func() {

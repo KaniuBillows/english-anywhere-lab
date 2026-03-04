@@ -2,6 +2,7 @@ package http
 
 import (
 	nethttp "net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -17,6 +18,13 @@ import (
 	"github.com/bennyshi/english-anywhere-lab/internal/transport/http/middleware"
 )
 
+// StaticFilesConfig holds configuration for local file serving.
+// If Dir is empty, no static file route is mounted.
+type StaticFilesConfig struct {
+	Dir     string // local filesystem directory
+	BaseURL string // URL prefix, e.g. "/static/files"
+}
+
 func NewRouter(
 	application *app.App,
 	authSvc *auth.Service,
@@ -26,7 +34,7 @@ func NewRouter(
 	progressSvc *progress.Service,
 	packSvc *pack.Service,
 	outputSvc *output.Service,
-	filesLocalRoot string,
+	staticFiles StaticFilesConfig,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -41,9 +49,10 @@ func NewRouter(
 	r.Get("/health", handler.Health)
 
 	// Static file serving for local object storage
-	if filesLocalRoot != "" {
-		fileServer := nethttp.FileServer(nethttp.Dir(filesLocalRoot))
-		r.Handle("/static/files/*", nethttp.StripPrefix("/static/files", fileServer))
+	if staticFiles.Dir != "" && staticFiles.BaseURL != "" {
+		prefix := strings.TrimRight(staticFiles.BaseURL, "/")
+		fileServer := nethttp.FileServer(nethttp.Dir(staticFiles.Dir))
+		r.Handle(prefix+"/*", nethttp.StripPrefix(prefix, fileServer))
 	}
 
 	// API v1

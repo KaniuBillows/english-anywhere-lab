@@ -439,6 +439,68 @@ func TestProcessJob_EnqueuesTTSJobs(t *testing.T) {
 	}
 }
 
+func TestTTSJobs_DoNotPollutePackGenerationDailyLimit(t *testing.T) {
+	database := setupTestDB(t)
+	userID := seedUser(t, database)
+	seedJob(t, database, userID)
+
+	// Mock LLM server
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]string{"content": validLLMResponse}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	cfg := &config.Config{
+		LLMBaseURL:    mockServer.URL,
+		LLMAPIKey:     "test-key",
+		LLMModel:      "test-model",
+		LLMTimeoutSec: 30,
+		LLMMaxRetries: 0,
+	}
+	llmClient := llm.NewClient(cfg)
+	repo := pack.NewRepository(database)
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+
+	gen := worker.NewGenerator(repo, llmClient, database, logger)
+
+	job, err := repo.ClaimNextJob(context.Background())
+	if err != nil {
+		t.Fatalf("claim job: %v", err)
+	}
+
+	err = gen.ProcessJob(context.Background(), job)
+	if err != nil {
+		t.Fatalf("process job: %v", err)
+	}
+
+	// At this point: 1 pack_generation job (success) + 6 tts_generation jobs (queued).
+	// Daily limit is 2 for pack_generation.
+	// The user should still be able to create a second pack_generation job.
+	var totalJobs int
+	err = database.QueryRow("SELECT COUNT(*) FROM ai_generation_jobs WHERE user_id = ?", userID).Scan(&totalJobs)
+	if err != nil {
+		t.Fatalf("count all jobs: %v", err)
+	}
+	if totalJobs != 7 { // 1 pack + 6 tts
+		t.Fatalf("expected 7 total jobs, got %d", totalJobs)
+	}
+
+	// CountUserJobsToday should only count pack_generation jobs
+	count, err := repo.CountUserJobsToday(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("count user jobs today: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 pack_generation job counted, got %d", count)
+	}
+}
+
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewJSONHandler(io.Discard, nil))
 }

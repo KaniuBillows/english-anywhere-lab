@@ -77,11 +77,11 @@ func (w *TTSWorker) Run(ctx context.Context) {
 			}
 		}
 
-		w.logger.Info("processing TTS job", "job_id", job.ID)
+		w.logger.Info("processing TTS job", "job_id", job.ID, "retry_count", job.RetryCount)
 
 		if err := w.ProcessJob(ctx, job); err != nil {
 			w.logger.Error("TTS job failed", "job_id", job.ID, "error", err)
-			w.updateJobStatus(ctx, job.ID, "failed", err.Error())
+			w.HandleFailure(ctx, job, err)
 		} else {
 			w.logger.Info("TTS job completed", "job_id", job.ID)
 			w.updateJobStatus(ctx, job.ID, "success", "")
@@ -101,9 +101,9 @@ func (w *TTSWorker) ClaimNextTTSJob(ctx context.Context) (*TTSJob, error) {
 		   WHERE job_type = 'tts_generation' AND status = 'queued'
 		   ORDER BY created_at ASC LIMIT 1
 		 )
-		 RETURNING id, user_id, request_payload`,
+		 RETURNING id, user_id, request_payload, retry_count`,
 		now,
-	).Scan(&j.ID, &j.UserID, &j.RequestPayload)
+	).Scan(&j.ID, &j.UserID, &j.RequestPayload, &j.RetryCount)
 	if err != nil {
 		return nil, err
 	}
@@ -142,6 +142,25 @@ func (w *TTSWorker) ProcessJob(ctx context.Context, job *TTSJob) error {
 	}
 
 	return nil
+}
+
+// HandleFailure requeues the job if retries remain, otherwise marks it as terminal failed.
+func (w *TTSWorker) HandleFailure(ctx context.Context, job *TTSJob, processErr error) {
+	if job.RetryCount < w.maxRetries {
+		// Requeue: increment retry_count and reset to queued
+		_, err := w.db.ExecContext(ctx,
+			`UPDATE ai_generation_jobs SET status = 'queued', retry_count = retry_count + 1, started_at = NULL, error_message = ? WHERE id = ?`,
+			processErr.Error(), job.ID,
+		)
+		if err != nil {
+			w.logger.Error("failed to requeue TTS job", "job_id", job.ID, "error", err)
+			return
+		}
+		w.logger.Info("requeued TTS job for retry", "job_id", job.ID, "retry", job.RetryCount+1, "max", w.maxRetries)
+	} else {
+		w.updateJobStatus(ctx, job.ID, "failed", processErr.Error())
+		w.logger.Warn("TTS job exhausted retries", "job_id", job.ID, "retries", job.RetryCount)
+	}
 }
 
 func (w *TTSWorker) updateJobStatus(ctx context.Context, jobID, status, errorMessage string) {

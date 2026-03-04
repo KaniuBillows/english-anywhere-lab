@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/bennyshi/english-anywhere-lab/internal/storage"
@@ -86,6 +87,15 @@ func seedPack(t *testing.T, database *sql.DB, userID string) string {
 	return packID
 }
 
+func queryJobState(t *testing.T, db *sql.DB, jobID string) (status string, retryCount int) {
+	t.Helper()
+	err := db.QueryRow("SELECT status, retry_count FROM ai_generation_jobs WHERE id = ?", jobID).Scan(&status, &retryCount)
+	if err != nil {
+		t.Fatalf("query job state: %v", err)
+	}
+	return
+}
+
 func TestTTSWorker_ProcessJob_Success(t *testing.T) {
 	database := setupTestDB(t)
 	userID := seedUser(t, database)
@@ -137,7 +147,6 @@ func TestTTSWorker_ProcessJob_Dedup(t *testing.T) {
 		t.Fatalf("claim TTS job: %v", err)
 	}
 
-	// Process twice (simulating dedup)
 	err = ttsWorker.ProcessJob(context.Background(), job)
 	if err != nil {
 		t.Fatalf("process job: %v", err)
@@ -183,7 +192,6 @@ func TestTTSWorker_ProcessJob_InvalidPayload(t *testing.T) {
 	database := setupTestDB(t)
 	userID := seedUser(t, database)
 
-	// Seed a job with invalid payload
 	jobID := uuid.New().String()
 	_, err := database.Exec(
 		`INSERT INTO ai_generation_jobs (id, user_id, job_type, domain, level, template_version, request_payload, status, created_at)
@@ -205,5 +213,95 @@ func TestTTSWorker_ProcessJob_InvalidPayload(t *testing.T) {
 	err = ttsWorker.ProcessJob(context.Background(), job)
 	if err == nil {
 		t.Fatal("expected error for invalid payload")
+	}
+}
+
+func TestTTSWorker_RetryRequeues(t *testing.T) {
+	database := setupTestDB(t)
+	userID := seedUser(t, database)
+	fakeCardID := uuid.New().String()
+	jobID := seedTTSJob(t, database, userID, fakeCardID, "retry test")
+
+	ttsSvc := setupTTSService(t)
+	maxRetries := 2
+	ttsWorker := worker.NewTTSWorker(database, ttsSvc, testLogger(), maxRetries)
+
+	// Attempt 1: claim, process (fails), HandleFailure should requeue
+	job, err := ttsWorker.ClaimNextTTSJob(context.Background())
+	if err != nil {
+		t.Fatalf("claim attempt 1: %v", err)
+	}
+	if job.RetryCount != 0 {
+		t.Fatalf("expected retry_count=0, got %d", job.RetryCount)
+	}
+
+	processErr := ttsWorker.ProcessJob(context.Background(), job)
+	if processErr == nil {
+		t.Fatal("expected error for nonexistent card")
+	}
+
+	ttsWorker.HandleFailure(context.Background(), job, processErr)
+
+	// Job should be requeued with retry_count=1
+	status, retryCount := queryJobState(t, database, jobID)
+	if status != "queued" {
+		t.Fatalf("expected status=queued after retry, got %s", status)
+	}
+	if retryCount != 1 {
+		t.Fatalf("expected retry_count=1, got %d", retryCount)
+	}
+
+	// Attempt 2: claim again, process (fails), HandleFailure should requeue again
+	job2, err := ttsWorker.ClaimNextTTSJob(context.Background())
+	if err != nil {
+		t.Fatalf("claim attempt 2: %v", err)
+	}
+	if job2.RetryCount != 1 {
+		t.Fatalf("expected retry_count=1, got %d", job2.RetryCount)
+	}
+
+	processErr2 := ttsWorker.ProcessJob(context.Background(), job2)
+	if processErr2 == nil {
+		t.Fatal("expected error")
+	}
+
+	ttsWorker.HandleFailure(context.Background(), job2, processErr2)
+
+	status, retryCount = queryJobState(t, database, jobID)
+	if status != "queued" {
+		t.Fatalf("expected status=queued after retry 2, got %s", status)
+	}
+	if retryCount != 2 {
+		t.Fatalf("expected retry_count=2, got %d", retryCount)
+	}
+
+	// Attempt 3: at maxRetries, HandleFailure should mark as terminal failed
+	job3, err := ttsWorker.ClaimNextTTSJob(context.Background())
+	if err != nil {
+		t.Fatalf("claim attempt 3: %v", err)
+	}
+	if job3.RetryCount != 2 {
+		t.Fatalf("expected retry_count=2, got %d", job3.RetryCount)
+	}
+
+	processErr3 := ttsWorker.ProcessJob(context.Background(), job3)
+	if processErr3 == nil {
+		t.Fatal("expected error")
+	}
+
+	ttsWorker.HandleFailure(context.Background(), job3, processErr3)
+
+	status, retryCount = queryJobState(t, database, jobID)
+	if status != "failed" {
+		t.Fatalf("expected status=failed after exhausting retries, got %s", status)
+	}
+	if retryCount != 2 {
+		t.Fatalf("expected retry_count=2 (unchanged), got %d", retryCount)
+	}
+
+	// Job should no longer be claimable
+	_, err = ttsWorker.ClaimNextTTSJob(context.Background())
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected no more queued jobs, got: %v", err)
 	}
 }
