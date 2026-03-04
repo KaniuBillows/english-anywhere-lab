@@ -1,11 +1,11 @@
 openapi: 3.0.3
 info:
   title: English Anywhere Lab API
-  version: 0.2.0
+  version: 0.3.0
   description: |
     API contract for English Anywhere Lab.
     Base path is /api/v1.
-    Covers M1 (Auth, Profile, Plan, Review, Progress) and R2-Step1 (Pack).
+    Covers M1 (Auth, Profile, Plan, Review, Progress), R2-Step1 (Pack), and R2-Step3 (Output).
 servers:
   - url: /api/v1
 tags:
@@ -15,6 +15,7 @@ tags:
   - name: Review
   - name: Pack
   - name: Progress
+  - name: Output
 security:
   - bearerAuth: []
 paths:
@@ -384,6 +385,63 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProgressDailyResponse'
 
+  /lessons/{lesson_id}/output-tasks:
+    get:
+      tags: [Output]
+      summary: List writing tasks for a lesson
+      operationId: listOutputTasks
+      parameters:
+        - $ref: '#/components/parameters/LessonId'
+      responses:
+        '200':
+          description: Writing tasks list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutputTaskListResponse'
+
+  /output-tasks/{output_task_id}/submit:
+    post:
+      tags: [Output]
+      summary: Submit a writing task for AI feedback
+      operationId: submitWriting
+      parameters:
+        - $ref: '#/components/parameters/OutputTaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitWritingRequest'
+      responses:
+        '200':
+          description: Submission with AI feedback
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /output-tasks/submissions/{submission_id}:
+    get:
+      tags: [Output]
+      summary: Get a submission by ID
+      operationId: getSubmission
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      responses:
+        '200':
+          description: Submission detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -416,6 +474,27 @@ components:
     JobId:
       in: path
       name: job_id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    LessonId:
+      in: path
+      name: lesson_id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OutputTaskId:
+      in: path
+      name: output_task_id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SubmissionId:
+      in: path
+      name: submission_id
       required: true
       schema:
         type: string
@@ -906,3 +985,93 @@ components:
           type: string
           nullable: true
       required: [job_id, status, created_at]
+
+    OutputTask:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        lesson_id:
+          type: string
+          format: uuid
+        task_type:
+          type: string
+          enum: [reading, listening, speaking, writing, mixed]
+        prompt_text:
+          type: string
+        reference_answer:
+          type: string
+          nullable: true
+        level:
+          $ref: '#/components/schemas/CefrLevel'
+      required: [id, task_type, prompt_text]
+
+    OutputTaskListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutputTask'
+      required: [items]
+
+    SubmitWritingRequest:
+      type: object
+      properties:
+        answer_text:
+          type: string
+          minLength: 1
+          maxLength: 5000
+      required: [answer_text]
+
+    WritingError:
+      type: object
+      properties:
+        original:
+          type: string
+        correction:
+          type: string
+        explanation:
+          type: string
+      required: [original, correction, explanation]
+
+    WritingFeedback:
+      type: object
+      properties:
+        overall_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        errors:
+          type: array
+          items:
+            $ref: '#/components/schemas/WritingError'
+        revised_text:
+          type: string
+        next_actions:
+          type: array
+          items:
+            type: string
+      required: [overall_score, errors, revised_text, next_actions]
+
+    SubmissionResponse:
+      type: object
+      properties:
+        submission_id:
+          type: string
+          format: uuid
+        task_id:
+          type: string
+          format: uuid
+        answer_text:
+          type: string
+        feedback:
+          $ref: '#/components/schemas/WritingFeedback'
+        score:
+          type: number
+          format: float
+        submitted_at:
+          type: string
+          format: date-time
+      required: [submission_id, task_id, answer_text, score, submitted_at]
