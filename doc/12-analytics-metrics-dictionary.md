@@ -24,16 +24,22 @@
 ### 2.5 AI 学习包使用率
 - 定义：`被加入学习计划的 AI 包数量 / 生成成功的 AI 包数量`
 
+### 2.6 题型完成率（按 `exercise_type`）
+- 定义：`完成任务数 / 开始任务数`，按 `exercise_type` 分组。
+
+### 2.7 模板完成率（按 `pack_template`）
+- 定义：`达到包级完成标准的 pack 数 / 启动学习的 pack 数`，按 `pack_template` 分组。
+
 ## 3. 事件埋点字典
 
 | 事件名 | 触发时机 | 必填属性 |
 | --- | --- | --- |
 | `onboarding_completed` | 初始化流程完成 | `user_id`, `level`, `domain`, `daily_minutes` |
 | `daily_plan_started` | 点击开始今日学习 | `user_id`, `plan_id`, `mode`, `device_type` |
-| `lesson_completed` | 单个 lesson 完成 | `user_id`, `lesson_id`, `duration_sec` |
-| `card_reviewed` | 提交一次评分 | `user_id`, `card_id`, `rating`, `response_ms` |
-| `output_task_submitted` | 提交口语/写作任务 | `user_id`, `task_id`, `task_type`, `score` |
-| `ai_pack_generated` | AI 生成任务结束 | `user_id`, `job_id`, `status`, `latency_ms` |
+| `lesson_completed` | 单个 lesson 完成 | `user_id`, `lesson_id`, `duration_sec`, `pack_template` |
+| `card_reviewed` | 提交一次评分 | `user_id`, `card_id`, `rating`, `response_ms`, `exercise_type` |
+| `output_task_submitted` | 提交口语/写作任务 | `user_id`, `task_id`, `task_type`, `exercise_type`, `evaluation_mode`, `score` |
+| `ai_pack_generated` | AI 生成任务结束 | `user_id`, `job_id`, `status`, `latency_ms`, `pack_template` |
 | `dashboard_viewed` | 打开看板 | `user_id`, `range`, `device_type` |
 
 ## 4. 公共属性（所有事件）
@@ -44,6 +50,9 @@
 - `platform`：`web_mobile|web_desktop`
 - `app_version`
 - `timezone`
+- `pack_template`（如无则置空）
+- `exercise_type`（如无则置空）
+- `evaluation_mode`（如无则置空）
 
 ## 5. 去重规则
 - 主键：`event_id`
@@ -69,3 +78,4 @@
 1. 学习漏斗：开始计划 -> 完成 lesson -> 完成输出
 2. 复习健康：到期量、完成量、正确率、积压量
 3. AI 资源表现：生成成功率、使用率、复用率
+4. 类型表现：按 `pack_template/exercise_type` 的完成率与中断率

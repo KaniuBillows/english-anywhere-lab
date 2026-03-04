@@ -2,6 +2,7 @@ package http_test
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -17,6 +18,8 @@ import (
 	"github.com/bennyshi/english-anywhere-lab/internal/auth"
 	"github.com/bennyshi/english-anywhere-lab/internal/config"
 	"github.com/bennyshi/english-anywhere-lab/internal/db"
+	"github.com/bennyshi/english-anywhere-lab/internal/llm"
+	"github.com/bennyshi/english-anywhere-lab/internal/output"
 	"github.com/bennyshi/english-anywhere-lab/internal/pack"
 	"github.com/bennyshi/english-anywhere-lab/internal/plan"
 	"github.com/bennyshi/english-anywhere-lab/internal/progress"
@@ -27,6 +30,13 @@ import (
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 )
+
+// mockLLMCaller returns canned WritingFeedback JSON for testing.
+type mockLLMCaller struct{}
+
+func (m *mockLLMCaller) ChatCompletion(_ context.Context, _ []llm.Message) (string, error) {
+	return `{"overall_score":85,"errors":[{"original":"I go to school yesterday","correction":"I went to school yesterday","explanation":"Use past tense for past events"}],"revised_text":"I went to school yesterday.","next_actions":["Practice past tense verbs"]}`, nil
+}
 
 // testEnv holds a running httptest.Server backed by the full application stack.
 type testEnv struct {
@@ -84,7 +94,10 @@ func newTestEnv(t *testing.T) *testEnv {
 	packRepo := pack.NewRepository(database)
 	packSvc := pack.NewService(packRepo, database)
 
-	router := httptransport.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc, packSvc)
+	outputRepo := output.NewRepository(database)
+	outputSvc := output.NewService(outputRepo, &mockLLMCaller{})
+
+	router := httptransport.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc, packSvc, outputSvc)
 	server := httptest.NewServer(router)
 
 	t.Cleanup(func() {
@@ -1276,4 +1289,221 @@ func TestGenerateJobRace(t *testing.T) {
 	if jobCount > 2 {
 		t.Fatalf("expected at most 2 jobs in DB, got %d", jobCount)
 	}
+}
+
+// ==================== Output Task seed helpers ====================
+
+// seedOutputTask inserts an output_task row.
+func (e *testEnv) seedOutputTask(t *testing.T, id, lessonID, taskType, promptText, referenceAnswer, level string) {
+	t.Helper()
+	now := time.Now().UTC().Format(time.RFC3339)
+	var refAnswer, lvl sql.NullString
+	if referenceAnswer != "" {
+		refAnswer = sql.NullString{String: referenceAnswer, Valid: true}
+	}
+	if level != "" {
+		lvl = sql.NullString{String: level, Valid: true}
+	}
+	_, err := e.db.Exec(
+		`INSERT INTO output_tasks (id, lesson_id, task_type, prompt_text, reference_answer, level, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		id, lessonID, taskType, promptText, refAnswer, lvl, now,
+	)
+	if err != nil {
+		t.Fatalf("seed output task %s: %v", id, err)
+	}
+}
+
+// ==================== Output Task API Tests ====================
+
+func TestOutputTaskAPI(t *testing.T) {
+	env := newTestEnv(t)
+
+	authResp := env.registerUser(t, "output-test@test.com", "securepassword123")
+	accessToken := authResp.Tokens.AccessToken
+	userID := authResp.User.ID
+
+	// Seed a pack, lesson, and output tasks
+	packID := uuid.New().String()
+	lessonID := uuid.New().String()
+	emptyLessonID := uuid.New().String()
+	writingTaskID := uuid.New().String()
+	readingTaskID := uuid.New().String()
+
+	env.seedPack(t, packID, "official", "Output Test Pack", "general", "B1")
+	env.seedLesson(t, lessonID, packID, "Lesson with tasks", "writing", 1)
+	env.seedLesson(t, emptyLessonID, packID, "Empty lesson", "reading", 2)
+
+	env.seedOutputTask(t, writingTaskID, lessonID, "writing", "Write a paragraph about your daily routine.", "I wake up at 7am every morning.", "B1")
+	env.seedOutputTask(t, readingTaskID, lessonID, "reading", "Read and summarize the passage.", "", "B1")
+
+	// 1. List writing tasks for lesson → 200, only writing tasks returned
+	t.Run("List writing tasks for lesson", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/lessons/"+lessonID+"/output-tasks", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.OutputTaskListResponse](t, resp)
+		if len(result.Items) != 1 {
+			t.Fatalf("expected 1 writing task, got %d", len(result.Items))
+		}
+		if result.Items[0].ID != writingTaskID {
+			t.Fatalf("expected task id=%s, got %s", writingTaskID, result.Items[0].ID)
+		}
+		if result.Items[0].TaskType != "writing" {
+			t.Fatalf("expected task_type=writing, got %s", result.Items[0].TaskType)
+		}
+	})
+
+	// 2. List tasks for empty lesson → 200, empty array
+	t.Run("List tasks for empty lesson", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/lessons/"+emptyLessonID+"/output-tasks", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.OutputTaskListResponse](t, resp)
+		if len(result.Items) != 0 {
+			t.Fatalf("expected 0 tasks, got %d", len(result.Items))
+		}
+	})
+
+	// 3. Submit writing → 200, feedback + score present
+	var submissionID string
+	t.Run("Submit writing", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/output-tasks/"+writingTaskID+"/submit", accessToken, map[string]any{
+			"answer_text": "I go to school yesterday and I eat lunch with my friend.",
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.SubmissionResponse](t, resp)
+		if result.SubmissionID == "" {
+			t.Fatal("expected non-empty submission_id")
+		}
+		if result.Feedback == nil {
+			t.Fatal("expected non-nil feedback")
+		}
+		if result.Feedback.OverallScore != 85 {
+			t.Fatalf("expected overall_score=85, got %d", result.Feedback.OverallScore)
+		}
+		if result.Score != 85 {
+			t.Fatalf("expected score=85, got %f", result.Score)
+		}
+		if len(result.Feedback.Errors) == 0 {
+			t.Fatal("expected at least 1 error in feedback")
+		}
+		if result.Feedback.RevisedText == "" {
+			t.Fatal("expected non-empty revised_text")
+		}
+		submissionID = result.SubmissionID
+	})
+
+	// 4. Submit nonexistent task → 404
+	t.Run("Submit nonexistent task", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/output-tasks/"+uuid.New().String()+"/submit", accessToken, map[string]any{
+			"answer_text": "Some text.",
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.StatusCode)
+		}
+	})
+
+	// 5. Submit non-writing task → 400
+	t.Run("Submit non-writing task", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/output-tasks/"+readingTaskID+"/submit", accessToken, map[string]any{
+			"answer_text": "Some text.",
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+	})
+
+	// 6. Submit empty answer → 400
+	t.Run("Submit empty answer", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/output-tasks/"+writingTaskID+"/submit", accessToken, map[string]any{
+			"answer_text": "",
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+	})
+
+	// 7. Get submission → 200
+	t.Run("Get submission", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/output-tasks/submissions/"+submissionID, accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.SubmissionResponse](t, resp)
+		if result.SubmissionID != submissionID {
+			t.Fatalf("expected submission_id=%s, got %s", submissionID, result.SubmissionID)
+		}
+		if result.Feedback == nil {
+			t.Fatal("expected non-nil feedback")
+		}
+		if result.Score != 85 {
+			t.Fatalf("expected score=85, got %f", result.Score)
+		}
+	})
+
+	// 8. Get nonexistent submission → 404
+	t.Run("Get nonexistent submission", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/output-tasks/submissions/"+uuid.New().String(), accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.StatusCode)
+		}
+	})
+
+	// 9. Get submission as wrong user → 404
+	t.Run("Get submission as wrong user", func(t *testing.T) {
+		otherAuth := env.registerUser(t, "other-user@test.com", "securepassword123")
+		otherToken := otherAuth.Tokens.AccessToken
+
+		resp := env.doRequest(t, "GET", "/api/v1/output-tasks/submissions/"+submissionID, otherToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.StatusCode)
+		}
+	})
+
+	// 10. Verify progress_daily.writing_tasks_completed incremented
+	t.Run("Verify progress incremented", func(t *testing.T) {
+		today := time.Now().UTC().Format("2006-01-02")
+		var count int
+		err := env.db.QueryRow(
+			"SELECT writing_tasks_completed FROM progress_daily WHERE user_id = ? AND progress_date = ?",
+			userID, today,
+		).Scan(&count)
+		if err != nil {
+			t.Fatalf("query progress: %v", err)
+		}
+		if count < 1 {
+			t.Fatalf("expected writing_tasks_completed >= 1, got %d", count)
+		}
+	})
 }

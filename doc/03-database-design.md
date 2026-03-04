@@ -224,6 +224,12 @@ CREATE INDEX idx_ai_jobs_status ON ai_generation_jobs (status, created_at DESC);
 - `review_logs.state_before/state_after` 用于回放和调试 FSRS 行为。
 - `progress_daily` 通过离线任务或流式聚合更新，避免在线重算。
 - `metadata/jsonb` 仅作为扩展字段，核心检索字段必须结构化落列。
+- 学习包类型体系按 `doc/16-learning-pack-type-system.md` 执行：
+  - `resource_packs.metadata.pack_template`：学习包模板类型（必填）
+  - `cards.metadata.exercise_type`：卡片/客观题交互类型（必填）
+  - `output_tasks.metadata.exercise_type`：输出题交互类型（必填）
+  - `resource_packs.metadata.completion_rule`：包级完成规则（建议填充）
+- 所有学习任务必须先落库再进入计划和进度统计，禁止临时虚拟任务参与正式计分。
 
 ## 6. 典型查询（示例）
 

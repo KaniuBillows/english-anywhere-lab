@@ -12,6 +12,7 @@
 - 生成音频（mp3）
 - 词卡插图（png/jpg/webp）
 - 导出报告（pdf/json）
+- TTS 词卡音频（wav/mp3/opus）
 
 ## 3. 统一接口（Go）
 ```go
@@ -33,12 +34,14 @@ type PutRequest struct {
 
 ## 4. 对象键命名规范
 - 音频：`user/{user_id}/audio/{yyyy}/{mm}/{uuid}.webm`
+- TTS：`tts/{lang}/{voice}/{format}/{sha256}.{ext}`
 - 图片：`pack/{pack_id}/image/{uuid}.webp`
 - 导出：`user/{user_id}/export/{yyyy}/{mm}/{uuid}.pdf`
 
 要求：
 - 不使用原始文件名作为 key（避免注入与冲突）
 - 所有 key 小写
+- TTS 对象键应具备确定性（同文本+同参数命中同 key），用于去重复用
 
 ## 5. Provider 配置
 
@@ -64,6 +67,7 @@ type PutRequest struct {
   - 其他：10MB
 - Content-Type 白名单校验。
 - 下载默认使用预签名 URL（S3）或受控静态路由（Local）。
+- TTS 资源优先走只读 URL（支持 CDN 缓存），避免每次都触发后端中转。
 
 ## 7. 安全规范
 - 禁止可执行脚本类型上传（`.exe`, `.sh`, `.js`）。

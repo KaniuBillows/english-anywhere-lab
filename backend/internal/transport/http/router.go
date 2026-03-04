@@ -8,6 +8,7 @@ import (
 
 	"github.com/bennyshi/english-anywhere-lab/internal/app"
 	"github.com/bennyshi/english-anywhere-lab/internal/auth"
+	"github.com/bennyshi/english-anywhere-lab/internal/output"
 	"github.com/bennyshi/english-anywhere-lab/internal/pack"
 	"github.com/bennyshi/english-anywhere-lab/internal/plan"
 	"github.com/bennyshi/english-anywhere-lab/internal/progress"
@@ -24,6 +25,7 @@ func NewRouter(
 	planSvc *plan.Service,
 	progressSvc *progress.Service,
 	packSvc *pack.Service,
+	outputSvc *output.Service,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -77,6 +79,12 @@ func NewRouter(
 			r.Post("/packs/{pack_id}/enroll", packH.Enroll)
 			r.Post("/packs/generate", packH.CreateGenerationJob)
 			r.Get("/packs/generation-jobs/{job_id}", packH.GetGenerationJob)
+
+			// Output
+			outputH := handler.NewOutputHandler(outputSvc)
+			r.Get("/lessons/{lesson_id}/output-tasks", outputH.ListTasks)
+			r.Post("/output-tasks/{task_id}/submit", outputH.SubmitWriting)
+			r.Get("/output-tasks/submissions/{submission_id}", outputH.GetSubmission)
 		})
 	})
 

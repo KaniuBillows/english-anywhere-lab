@@ -29,6 +29,7 @@ graph TD
     C --> C2[学习包详情]
     C --> C3[AI生成学习包]
     C --> C4[领域筛选]
+    C --> C5[模板与题型筛选]
 
     D --> D1[到期复习]
     D --> D2[困难词强化]
@@ -85,11 +86,11 @@ sequenceDiagram
     participant QC as Quality Check
     participant DB as Database
 
-    U->>FE: 输入领域、难度、时长
+    U->>FE: 输入领域、难度、时长、pack_template
     FE->>BE: 创建生成任务
     BE->>AI: 调用模板生成学习包
     AI-->>BE: 返回结构化内容(JSON)
-    BE->>QC: 难度/词汇/格式校验
+    BE->>QC: 难度/词汇/格式/题型覆盖校验
     QC-->>BE: 通过或失败原因
     alt 校验通过
         BE->>DB: 写入 Pack/Lesson/Card
@@ -115,7 +116,28 @@ flowchart TD
     G --> H
 ```
 
-## 6. 页面清单（MVP）
+## 6. 关键流程 5：题型驱动渲染
+```mermaid
+flowchart TD
+    A[获取今日任务] --> B{exercise_type 是否识别}
+    B -- 是 --> C[匹配专用组件渲染]
+    B -- 否 --> D[通用任务组件降级渲染]
+    C --> E[按 evaluation_mode 选择判分逻辑]
+    D --> E
+    E --> F[提交结果并记录埋点]
+```
+
+## 7. 关键流程 6：TTS 异步生成与回填
+```mermaid
+flowchart TD
+    A[Pack/Card 入库成功] --> B[创建 TTS 任务]
+    B --> C[Worker 离线 CPU 生成音频]
+    C --> D[写入 Local/S3 对象存储]
+    D --> E[回填 cards.audio_url]
+    E --> F[前端获取可播放音频]
+```
+
+## 8. 页面清单（MVP）
 - P01 登录与初始化页
 - P02 今日学习页
 - P03 学习包列表与详情页
@@ -124,12 +146,12 @@ flowchart TD
 - P06 进度看板页
 - P07 我的与设置页
 
-## 7. 响应式断点建议
+## 9. 响应式断点建议
 - Mobile：`< 768px`
 - Tablet：`768px - 1023px`
 - Desktop：`>= 1024px`
 
-## 8. 交互优先级建议
+## 10. 交互优先级建议
 - 优先保证“今日学习”和“复习中心”一跳可达
 - 次优先保证“学习包生成”和“进度看板”可发现性
 - 首版弱化复杂筛选，优先保留目标导向推荐

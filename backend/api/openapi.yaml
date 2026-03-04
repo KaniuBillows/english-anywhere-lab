@@ -1,11 +1,15 @@
 openapi: 3.0.3
 info:
   title: English Anywhere Lab API
-  version: 0.2.0
+  version: 0.4.0
   description: |
-    API contract for English Anywhere Lab.
+    Single OpenAPI contract for English Anywhere Lab.
     Base path is /api/v1.
-    Covers M1 (Auth, Profile, Plan, Review, Progress) and R2-Step1 (Pack).
+    This file is the only source of truth for API schema.
+
+    Operations marked with `x-implemented: true` are live and covered by
+    integration tests. Operations with `x-implemented: false` are roadmap
+    placeholders — do NOT include them in contract tests or QA automation.
 servers:
   - url: /api/v1
 tags:
@@ -15,6 +19,8 @@ tags:
   - name: Review
   - name: Pack
   - name: Progress
+  - name: Output
+  - name: Sync
 security:
   - bearerAuth: []
 paths:
@@ -23,6 +29,7 @@ paths:
       tags: [Auth]
       summary: Register a user
       operationId: register
+      x-implemented: true
       security: []
       requestBody:
         required: true
@@ -46,6 +53,7 @@ paths:
       tags: [Auth]
       summary: Login with email and password
       operationId: login
+      x-implemented: true
       security: []
       requestBody:
         required: true
@@ -67,6 +75,7 @@ paths:
       tags: [Auth]
       summary: Refresh access token
       operationId: refreshToken
+      x-implemented: true
       security: []
       requestBody:
         required: true
@@ -89,6 +98,7 @@ paths:
       tags: [Profile]
       summary: Get current user
       operationId: getMe
+      x-implemented: true
       responses:
         '200':
           description: Current user profile
@@ -104,6 +114,7 @@ paths:
       tags: [Profile]
       summary: Update learning profile
       operationId: updateProfile
+      x-implemented: true
       requestBody:
         required: true
         content:
@@ -125,6 +136,7 @@ paths:
       tags: [Plan]
       summary: Bootstrap the first weekly plan
       operationId: bootstrapPlan
+      x-implemented: true
       requestBody:
         required: true
         content:
@@ -146,6 +158,7 @@ paths:
       tags: [Plan]
       summary: Get today's learning plan
       operationId: getTodayPlan
+      x-implemented: true
       parameters:
         - in: query
           name: timezone
@@ -165,6 +178,7 @@ paths:
       tags: [Plan]
       summary: Mark task completed
       operationId: completeTask
+      x-implemented: true
       parameters:
         - $ref: '#/components/parameters/PlanId'
         - $ref: '#/components/parameters/TaskId'
@@ -187,6 +201,7 @@ paths:
       tags: [Review]
       summary: Get due review cards
       operationId: getReviewQueue
+      x-implemented: true
       parameters:
         - in: query
           name: limit
@@ -208,6 +223,7 @@ paths:
       tags: [Review]
       summary: Submit one review result
       operationId: submitReview
+      x-implemented: true
       parameters:
         - in: header
           name: Idempotency-Key
@@ -222,7 +238,13 @@ paths:
               $ref: '#/components/schemas/ReviewSubmitRequest'
       responses:
         '200':
-          description: Review accepted (duplicate Idempotency-Key or client_event_id returns the original result with 200)
+          description: Review accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewSubmitResponse'
+        '409':
+          description: Duplicate idempotency key accepted as success
           content:
             application/json:
               schema:
@@ -233,6 +255,7 @@ paths:
       tags: [Pack]
       summary: List learning packs
       operationId: listPacks
+      x-implemented: true
       parameters:
         - in: query
           name: domain
@@ -273,6 +296,7 @@ paths:
       tags: [Pack]
       summary: Get pack detail
       operationId: getPackDetail
+      x-implemented: true
       parameters:
         - $ref: '#/components/parameters/PackId'
       responses:
@@ -290,6 +314,7 @@ paths:
       tags: [Pack]
       summary: Enroll a pack into current learning plan
       operationId: enrollPack
+      x-implemented: true
       parameters:
         - $ref: '#/components/parameters/PackId'
       responses:
@@ -305,6 +330,7 @@ paths:
       tags: [Pack]
       summary: Create AI generation job
       operationId: createPackGenerationJob
+      x-implemented: true
       requestBody:
         required: true
         content:
@@ -326,6 +352,7 @@ paths:
       tags: [Pack]
       summary: Get generation job status
       operationId: getGenerationJob
+      x-implemented: true
       parameters:
         - $ref: '#/components/parameters/JobId'
       responses:
@@ -343,6 +370,7 @@ paths:
       tags: [Progress]
       summary: Get progress summary
       operationId: getProgressSummary
+      x-implemented: true
       parameters:
         - in: query
           name: range
@@ -363,6 +391,7 @@ paths:
       tags: [Progress]
       summary: Get daily progress series
       operationId: getProgressDaily
+      x-implemented: true
       parameters:
         - in: query
           name: from
@@ -383,6 +412,114 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProgressDailyResponse'
+
+  /lessons/{lesson_id}/output-tasks:
+    get:
+      tags: [Output]
+      summary: List output tasks for a lesson
+      operationId: listOutputTasks
+      x-implemented: true
+      parameters:
+        - $ref: '#/components/parameters/LessonId'
+      responses:
+        '200':
+          description: Writing tasks list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutputTaskListResponse'
+
+  /output-tasks/{output_task_id}/submit:
+    post:
+      tags: [Output]
+      summary: Submit a writing task for AI feedback
+      operationId: submitWriting
+      x-implemented: true
+      parameters:
+        - $ref: '#/components/parameters/OutputTaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitWritingRequest'
+      responses:
+        '200':
+          description: Submission with AI feedback
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /output-tasks/submissions/{submission_id}:
+    get:
+      tags: [Output]
+      summary: Get a submission by ID
+      operationId: getSubmission
+      x-implemented: true
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      responses:
+        '200':
+          description: Submission detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /sync/events:
+    post:
+      tags: [Sync]
+      summary: Push offline events with idempotency
+      operationId: pushSyncEvents
+      x-implemented: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncEventsRequest'
+      responses:
+        '200':
+          description: Ack statuses per event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncEventsResponse'
+
+  /sync/changes:
+    get:
+      tags: [Sync]
+      summary: Pull server-side changes since cursor
+      operationId: pullSyncChanges
+      x-implemented: false
+      parameters:
+        - in: query
+          name: cursor
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 200
+      responses:
+        '200':
+          description: Server change set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncChangesResponse'
 
 components:
   securitySchemes:
@@ -416,6 +553,27 @@ components:
     JobId:
       in: path
       name: job_id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    LessonId:
+      in: path
+      name: lesson_id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    OutputTaskId:
+      in: path
+      name: output_task_id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SubmissionId:
+      in: path
+      name: submission_id
       required: true
       schema:
         type: string
@@ -457,6 +615,61 @@ components:
     CefrLevel:
       type: string
       enum: [A1, A2, B1, B2, C1, C2]
+
+    PackTemplate:
+      type: string
+      enum:
+        - vocab_foundation
+        - scenario_dialog
+        - intensive_listening
+        - reading_comprehension
+        - writing_output
+        - review_booster
+        - speaking_bootcamp
+        - exam_drill
+
+    ExerciseType:
+      type: string
+      enum:
+        - flashcard_recall
+        - picture_naming
+        - audio_cloze
+        - dictation_short
+        - reading_mcq
+        - keyword_match
+        - cloze_word
+        - cloze_sentence
+        - sentence_reorder
+        - error_correction
+        - sentence_rewrite
+        - situational_qa
+        - picture_description
+        - guided_paragraph
+        - free_writing
+        - retell_audio
+
+    EvaluationMode:
+      type: string
+      enum: [objective, rubric, llm_hybrid]
+
+    TaskAssets:
+      type: object
+      properties:
+        image_url:
+          type: string
+          format: uri
+          nullable: true
+        audio_url:
+          type: string
+          format: uri
+          nullable: true
+
+    GenericMessage:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
 
     ErrorResponse:
       type: object
@@ -611,9 +824,12 @@ components:
           enum: [pending, in_progress, completed]
         estimated_minutes:
           type: integer
-        virtual:
-          type: boolean
-          description: If true, this task is dynamically injected (e.g. due review cards) and cannot be completed via the complete-task endpoint.
+        exercise_type:
+          $ref: '#/components/schemas/ExerciseType'
+        evaluation_mode:
+          $ref: '#/components/schemas/EvaluationMode'
+        assets:
+          $ref: '#/components/schemas/TaskAssets'
       required: [task_id, task_type, title, status, estimated_minutes]
 
     DailyPlan:
@@ -751,6 +967,123 @@ components:
           enum: [learning, review, relearning]
       required: [accepted, card_id, next_due_at, scheduled_days, status]
 
+    Pack:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        source:
+          type: string
+          enum: [official, ai]
+        title:
+          type: string
+        description:
+          type: string
+        domain:
+          type: string
+        pack_template:
+          $ref: '#/components/schemas/PackTemplate'
+        level:
+          $ref: '#/components/schemas/CefrLevel'
+        estimated_minutes:
+          type: integer
+      required: [id, source, title, domain, pack_template, level, estimated_minutes]
+
+    PackListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Pack'
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+      required: [items, page, page_size, total]
+
+    PackDetailResponse:
+      type: object
+      properties:
+        pack:
+          $ref: '#/components/schemas/Pack'
+        lessons:
+          type: array
+          items:
+            type: object
+            properties:
+              lesson_id:
+                type: string
+                format: uuid
+              title:
+                type: string
+              lesson_type:
+                type: string
+                enum: [reading, listening, speaking, writing, mixed]
+              position:
+                type: integer
+              exercise_types:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExerciseType'
+              output_task_count:
+                type: integer
+            required: [lesson_id, title, lesson_type, position]
+      required: [pack, lessons]
+
+    GeneratePackRequest:
+      type: object
+      properties:
+        level:
+          $ref: '#/components/schemas/CefrLevel'
+        domain:
+          type: string
+        pack_template:
+          $ref: '#/components/schemas/PackTemplate'
+        daily_minutes:
+          type: integer
+          minimum: 5
+          maximum: 180
+        days:
+          type: integer
+          minimum: 3
+          maximum: 14
+          default: 7
+        focus_skills:
+          type: array
+          items:
+            type: string
+            enum: [listening, speaking, reading, writing]
+      required: [level, domain, pack_template, daily_minutes]
+
+    GenerationJobResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued, running, success, failed]
+        created_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        pack_id:
+          type: string
+          format: uuid
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+      required: [job_id, status, created_at]
+
     ProgressSummaryResponse:
       type: object
       properties:
@@ -793,116 +1126,173 @@ components:
             $ref: '#/components/schemas/ProgressDailyPoint'
       required: [points]
 
-    GenericMessage:
+    SyncEvent:
       type: object
       properties:
-        message:
+        client_event_id:
           type: string
-      required: [message]
+          format: uuid
+        event_type:
+          type: string
+          enum: [review_submitted, output_submitted, task_completed, profile_updated]
+        occurred_at:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          additionalProperties: true
+      required: [client_event_id, event_type, occurred_at, payload]
 
-    Pack:
+    SyncEventsRequest:
+      type: object
+      properties:
+        events:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/SyncEvent'
+      required: [events]
+
+    SyncEventAck:
+      type: object
+      properties:
+        client_event_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [accepted, duplicate, rejected]
+        reason:
+          type: string
+          nullable: true
+      required: [client_event_id, status]
+
+    SyncEventsResponse:
+      type: object
+      properties:
+        acks:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncEventAck'
+        server_cursor:
+          type: string
+      required: [acks, server_cursor]
+
+    SyncChangesResponse:
+      type: object
+      properties:
+        next_cursor:
+          type: string
+        changes:
+          type: array
+          items:
+            type: object
+            properties:
+              entity_type:
+                type: string
+              entity_id:
+                type: string
+              op:
+                type: string
+                enum: [upsert, delete]
+              payload:
+                type: object
+                additionalProperties: true
+            required: [entity_type, entity_id, op, payload]
+      required: [next_cursor, changes]
+
+    OutputTask:
       type: object
       properties:
         id:
           type: string
           format: uuid
-        source:
+        lesson_id:
           type: string
-          enum: [official, ai]
-        title:
+          format: uuid
+        task_type:
           type: string
-        description:
+          enum: [reading, listening, speaking, writing, mixed]
+        exercise_type:
+          $ref: '#/components/schemas/ExerciseType'
+        evaluation_mode:
+          $ref: '#/components/schemas/EvaluationMode'
+        prompt_text:
           type: string
-        domain:
+        reference_answer:
           type: string
+          nullable: true
         level:
           $ref: '#/components/schemas/CefrLevel'
-        estimated_minutes:
-          type: integer
-      required: [id, source, title, domain, level, estimated_minutes]
+        assets:
+          $ref: '#/components/schemas/TaskAssets'
+      required: [id, task_type, exercise_type, evaluation_mode, prompt_text]
 
-    PackListResponse:
+    OutputTaskListResponse:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/Pack'
-        page:
-          type: integer
-        page_size:
-          type: integer
-        total:
-          type: integer
-      required: [items, page, page_size, total]
+            $ref: '#/components/schemas/OutputTask'
+      required: [items]
 
-    PackDetailResponse:
+    SubmitWritingRequest:
       type: object
       properties:
-        pack:
-          $ref: '#/components/schemas/Pack'
-        lessons:
+        answer_text:
+          type: string
+          minLength: 1
+          maxLength: 5000
+      required: [answer_text]
+
+    WritingError:
+      type: object
+      properties:
+        original:
+          type: string
+        correction:
+          type: string
+        explanation:
+          type: string
+      required: [original, correction, explanation]
+
+    WritingFeedback:
+      type: object
+      properties:
+        overall_score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        errors:
           type: array
           items:
-            type: object
-            properties:
-              lesson_id:
-                type: string
-                format: uuid
-              title:
-                type: string
-              lesson_type:
-                type: string
-                enum: [reading, listening, speaking, writing, mixed]
-              position:
-                type: integer
-            required: [lesson_id, title, lesson_type, position]
-      required: [pack, lessons]
-
-    GeneratePackRequest:
-      type: object
-      properties:
-        level:
-          $ref: '#/components/schemas/CefrLevel'
-        domain:
+            $ref: '#/components/schemas/WritingError'
+        revised_text:
           type: string
-        daily_minutes:
-          type: integer
-          minimum: 5
-          maximum: 180
-        days:
-          type: integer
-          minimum: 3
-          maximum: 14
-          default: 7
-        focus_skills:
+        next_actions:
           type: array
           items:
             type: string
-            enum: [listening, speaking, reading, writing]
-      required: [level, domain, daily_minutes]
+      required: [overall_score, errors, revised_text, next_actions]
 
-    GenerationJobResponse:
+    SubmissionResponse:
       type: object
       properties:
-        job_id:
+        submission_id:
           type: string
           format: uuid
-        status:
-          type: string
-          enum: [queued, running, success, failed]
-        created_at:
-          type: string
-          format: date-time
-        finished_at:
-          type: string
-          format: date-time
-          nullable: true
-        pack_id:
+        task_id:
           type: string
           format: uuid
-          nullable: true
-        error_message:
+        answer_text:
           type: string
-          nullable: true
-      required: [job_id, status, created_at]
+        feedback:
+          $ref: '#/components/schemas/WritingFeedback'
+        score:
+          type: number
+          format: float
+        submitted_at:
+          type: string
+          format: date-time
+      required: [submission_id, task_id, answer_text, score, submitted_at]

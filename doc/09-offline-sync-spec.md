@@ -13,6 +13,11 @@
   "occurred_at": "2026-03-02T09:00:00Z",
   "client_seq": 1024,
   "payload": {},
+  "event_context": {
+    "pack_template": "string|null",
+    "exercise_type": "string|null",
+    "evaluation_mode": "objective|rubric|llm_hybrid|null"
+  },
   "sync_status": "pending|acked|rejected",
   "retry_count": 0
 }
@@ -51,6 +56,7 @@
 ### 5.3 输出提交（output_submitted）
 - 同一任务允许多次提交。
 - 进度统计按“最后一次高分”或“首次完成”计入口径（二选一，建议首次完成）。
+- 若携带 `event_context.exercise_type`，服务端应写入分析事件用于题型效果统计。
 
 ### 5.4 配置更新（profile_updated）
 - 冲突策略：`last_write_wins`（按服务端接收时间）。

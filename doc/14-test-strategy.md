@@ -16,7 +16,7 @@
 - 场景：注册登录、今日计划、复习提交、AI 任务状态流转
 
 ### 2.3 契约测试
-- 基于 [openapi.yaml](/Users/bennyshi/dev/english-anywhere-lab/07-openapi.yaml) 校验：
+- 基于 [openapi.yaml](/Users/bennyshi/dev/english-anywhere-lab/backend/api/openapi.yaml)（项目唯一契约）校验：
   - 请求参数
   - 响应结构
   - 错误码
@@ -31,6 +31,9 @@
 - SQLite 锁竞争下的提交稳定性
 - 文件存储 Local/S3 双 provider 回归
 - LLM 生成失败重试与 QC 拦截
+- `pack_template/exercise_type` 白名单校验
+- 模板必选题型覆盖率校验（见 `doc/16`）
+- TTS 离线生成与对象键去重回归
 
 ## 4. 质量门禁（建议）
 - 单测覆盖率 >= 70%
