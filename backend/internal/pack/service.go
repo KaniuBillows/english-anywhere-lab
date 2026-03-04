@@ -133,14 +133,6 @@ type GenerateInput struct {
 }
 
 func (s *Service) CreateGenerationJob(ctx context.Context, input GenerateInput) (*GenerationJob, error) {
-	count, err := s.repo.CountUserJobsToday(ctx, input.UserID)
-	if err != nil {
-		return nil, fmt.Errorf("count user jobs: %w", err)
-	}
-	if count >= 2 {
-		return nil, ErrDailyLimitReached
-	}
-
 	payload, _ := json.Marshal(map[string]any{
 		"level":         input.Level,
 		"domain":        input.Domain,
@@ -161,7 +153,10 @@ func (s *Service) CreateGenerationJob(ctx context.Context, input GenerateInput) 
 		CreatedAt:       time.Now().UTC(),
 	}
 
-	if err := s.repo.CreateGenerationJob(ctx, job); err != nil {
+	if err := s.repo.CreateGenerationJobIfUnderLimit(ctx, job, 2); err != nil {
+		if errors.Is(err, ErrDailyLimitReached) {
+			return nil, ErrDailyLimitReached
+		}
 		return nil, fmt.Errorf("create generation job: %w", err)
 	}
 

@@ -318,6 +318,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GenerationJobResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 
   /packs/generation-jobs/{job_id}:
     get:
@@ -440,6 +442,12 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     Conflict:
       description: Conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TooManyRequests:
+      description: Rate limit exceeded
       content:
         application/json:
           schema:

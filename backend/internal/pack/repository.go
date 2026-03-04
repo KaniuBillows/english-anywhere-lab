@@ -198,6 +198,57 @@ func (r *Repository) CreateGenerationJob(ctx context.Context, job *GenerationJob
 	return err
 }
 
+// CreateGenerationJobIfUnderLimit atomically checks the daily job count and
+// inserts a new job within a single transaction to prevent race conditions.
+// Returns ErrDailyLimitReached if the user already has >= maxPerDay jobs today.
+func (r *Repository) CreateGenerationJobIfUnderLimit(ctx context.Context, job *GenerationJob, maxPerDay int) error {
+	// Use a raw connection to issue BEGIN IMMEDIATE for proper SQLite write locking.
+	conn, err := r.db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire conn: %w", err)
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+		return fmt.Errorf("begin immediate: %w", err)
+	}
+
+	var committed bool
+	defer func() {
+		if !committed {
+			conn.ExecContext(ctx, "ROLLBACK")
+		}
+	}()
+
+	startOfDay := time.Now().UTC().Truncate(24 * time.Hour).Format(time.RFC3339)
+	var count int
+	err = conn.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM ai_generation_jobs WHERE user_id = ? AND created_at >= ?`,
+		job.UserID, startOfDay,
+	).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("count jobs: %w", err)
+	}
+	if count >= maxPerDay {
+		return ErrDailyLimitReached
+	}
+
+	_, err = conn.ExecContext(ctx,
+		`INSERT INTO ai_generation_jobs (id, user_id, job_type, domain, level, template_version, request_payload, status, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		job.ID, job.UserID, job.JobType, job.Domain, job.Level, job.TemplateVersion, job.RequestPayload, job.Status, job.CreatedAt.UTC().Format(time.RFC3339),
+	)
+	if err != nil {
+		return fmt.Errorf("insert job: %w", err)
+	}
+
+	if _, err := conn.ExecContext(ctx, "COMMIT"); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+	committed = true
+	return nil
+}
+
 func (r *Repository) GetGenerationJob(ctx context.Context, jobID, userID string) (*GenerationJob, error) {
 	var j GenerationJob
 	var createdAt string
@@ -250,11 +301,21 @@ func (r *Repository) UpdateJobStatus(ctx context.Context, jobID, status, respons
 		errMsg = sql.NullString{String: errorMessage, Valid: true}
 	}
 
-	_, err := r.db.ExecContext(ctx,
+	res, err := r.db.ExecContext(ctx,
 		`UPDATE ai_generation_jobs SET status = ?, finished_at = ?, response_payload = ?, error_message = ? WHERE id = ?`,
 		status, now, respPayload, errMsg, jobID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("job %s: no rows updated", jobID)
+	}
+	return nil
 }
 
 // CountUserJobsToday counts the number of generation jobs created today (UTC) by a user.

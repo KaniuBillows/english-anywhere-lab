@@ -115,7 +115,9 @@ func (g *Generator) ProcessJob(ctx context.Context, job *pack.GenerationJob) err
 		return fmt.Errorf("commit tx: %w", err)
 	}
 
-	_ = g.repo.UpdateJobStatus(ctx, job.ID, "success", raw, "")
+	if err := g.repo.UpdateJobStatus(ctx, job.ID, "success", raw, ""); err != nil {
+		return fmt.Errorf("update job status to success: %w", err)
+	}
 	g.logger.Info("pack created", "job_id", job.ID, "pack_id", packID)
 	return nil
 }
