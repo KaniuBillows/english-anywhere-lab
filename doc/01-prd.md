@@ -1,8 +1,8 @@
-# English Anywhere Lab - PRD（v0.2）
+# English Anywhere Lab - PRD（v0.3）
 
 ## 1. 文档信息
 - 文档类型：产品需求文档（PRD）
-- 版本：v0.2
+- 版本：v0.3
 - 日期：2026-03-04
 - 状态：Draft -> 可进入设计与开发拆分
 
@@ -158,6 +158,8 @@
 业务规则：
 - 每个学习包必须具备 `level + domain + estimated_minutes`
 - AI 生成结果必须通过：JSON 结构校验 + 业务 QC（重复度、字段完整性、难度匹配）
+- 学习包与题型必须符合 `doc/16-learning-pack-type-system.md`：每个 pack 必须标注 `pack_template`，每个任务必须标注 `exercise_type`
+- 模板必选题型必须覆盖，且单 lesson 至少包含 2 种不同 `exercise_type`
 - 任务对象必须落库后才可被学习流程引用；禁止“随机生成且不落库”的临时任务进入正式任务流
 
 异常与降级：
@@ -326,3 +328,4 @@
 - D-004：数据库默认 SQLite（低成本），PostgreSQL 为可选配置。
 - D-005：M1 接口单一真值采用 `doc/07-openapi-m1.yaml`。`doc/07-openapi.yaml` 作为后续阶段的全量路线图契约，不作为 M1 实现验收基线。
 - D-006：复习调度时间以服务端接收时间为准；客户端 `reviewed_at` 仅用于审计和离线重放排序，不直接决定 `next_due_at`。
+- D-007：学习内容类型体系采用 `doc/16-learning-pack-type-system.md` 作为单一真值；`pack_template + exercise_type` 为后端校验、前端渲染、AI 生成与测试验收的共同字段。

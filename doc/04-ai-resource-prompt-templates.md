@@ -9,6 +9,8 @@
 ## 2. 变量约定
 - `{{level}}`：A1/A2/B1/B2/C1/C2
 - `{{domain}}`：如 `trade`, `tech`, `travel`, `interview`, `general`
+- `{{pack_template}}`：学习包模板类型（见 `doc/16-learning-pack-type-system.md`）
+- `{{allowed_exercise_types}}`：允许的题型白名单（来自 `doc/16-learning-pack-type-system.md`）
 - `{{daily_minutes}}`：每天学习分钟数
 - `{{days}}`：计划周期天数（默认 7）
 - `{{focus_skills}}`：`listening, speaking, reading, writing`
@@ -38,6 +40,7 @@ Generate a {{days}}-day English study pack.
 Inputs:
 - CEFR level: {{level}}
 - Domain: {{domain}}
+- Pack template: {{pack_template}}
 - Daily study minutes: {{daily_minutes}}
 - Focus skills: {{focus_skills}}
 - Native language: {{native_language}}
@@ -47,6 +50,7 @@ Output JSON schema:
 {
   "pack": {
     "title": "string",
+    "pack_template": "vocab_foundation|scenario_dialog|intensive_listening|reading_comprehension|writing_output|review_booster|speaking_bootcamp|exam_drill",
     "domain": "string",
     "level": "A1|A2|B1|B2|C1|C2",
     "days": number,
@@ -67,6 +71,7 @@ Output JSON schema:
       "retrieval_quiz": [
         {
           "type": "mcq|cloze|short_answer",
+          "exercise_type": "flashcard_recall|cloze_word|cloze_sentence|reading_mcq|audio_cloze|dictation_short|keyword_match|sentence_reorder|error_correction|sentence_rewrite|situational_qa|picture_naming|picture_description|guided_paragraph|free_writing|retell_audio",
           "question": "string",
           "answer": "string",
           "explanation": "string"
@@ -82,6 +87,7 @@ Output JSON schema:
       ],
       "output_task": {
         "type": "speaking|writing",
+        "exercise_type": "situational_qa|picture_description|guided_paragraph|free_writing|retell_audio",
         "prompt": "string",
         "rubric": ["string"]
       }
@@ -91,6 +97,7 @@ Output JSON schema:
 
 Hard constraints:
 - For {{level}}, keep reading_text within reasonable complexity.
+- `exercise_type` must be within {{allowed_exercise_types}}.
 - Each lesson must include 8-12 key vocab items.
 - Each lesson must include 12-20 srs_cards.
 - Output task must be scenario-based and domain-specific.
