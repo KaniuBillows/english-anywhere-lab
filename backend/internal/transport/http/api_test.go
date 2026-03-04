@@ -17,6 +17,7 @@ import (
 	"github.com/bennyshi/english-anywhere-lab/internal/auth"
 	"github.com/bennyshi/english-anywhere-lab/internal/config"
 	"github.com/bennyshi/english-anywhere-lab/internal/db"
+	"github.com/bennyshi/english-anywhere-lab/internal/pack"
 	"github.com/bennyshi/english-anywhere-lab/internal/plan"
 	"github.com/bennyshi/english-anywhere-lab/internal/progress"
 	"github.com/bennyshi/english-anywhere-lab/internal/review"
@@ -80,7 +81,10 @@ func newTestEnv(t *testing.T) *testEnv {
 	progressRepo := progress.NewRepository(database)
 	progressSvc := progress.NewService(progressRepo)
 
-	router := httptransport.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc)
+	packRepo := pack.NewRepository(database)
+	packSvc := pack.NewService(packRepo, database)
+
+	router := httptransport.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc, packSvc)
 	server := httptest.NewServer(router)
 
 	t.Cleanup(func() {
@@ -705,6 +709,381 @@ func TestAPI(t *testing.T) {
 				t.Fatalf("expected 400, got %d", resp.StatusCode)
 			}
 		})
+	})
+}
+
+// ==================== Pack seed helpers ====================
+
+// seedPack inserts a resource_pack row.
+func (e *testEnv) seedPack(t *testing.T, id, source, title, domain, level string) {
+	t.Helper()
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := e.db.Exec(
+		`INSERT INTO resource_packs (id, source, title, description, domain, level, estimated_minutes, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, 20, ?)`,
+		id, source, title, title+" description", domain, level, now,
+	)
+	if err != nil {
+		t.Fatalf("seed pack %s: %v", id, err)
+	}
+}
+
+// seedLesson inserts a lesson row.
+func (e *testEnv) seedLesson(t *testing.T, id, packID, title, lessonType string, position int) {
+	t.Helper()
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := e.db.Exec(
+		`INSERT INTO lessons (id, pack_id, title, lesson_type, position, estimated_minutes, created_at)
+		 VALUES (?, ?, ?, ?, ?, 10, ?)`,
+		id, packID, title, lessonType, position, now,
+	)
+	if err != nil {
+		t.Fatalf("seed lesson %s: %v", id, err)
+	}
+}
+
+// seedCard inserts a card row attached to a lesson.
+func (e *testEnv) seedCard(t *testing.T, id, lessonID, front, back string) {
+	t.Helper()
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := e.db.Exec(
+		`INSERT INTO cards (id, lesson_id, front_text, back_text, created_at) VALUES (?, ?, ?, ?, ?)`,
+		id, lessonID, front, back, now,
+	)
+	if err != nil {
+		t.Fatalf("seed card %s: %v", id, err)
+	}
+}
+
+// ==================== Pack API Tests ====================
+
+func TestPackAPI(t *testing.T) {
+	env := newTestEnv(t)
+
+	authResp := env.registerUser(t, "pack-test@test.com", "securepassword123")
+	accessToken := authResp.Tokens.AccessToken
+
+	// 1. List packs (empty)
+	t.Run("List packs empty", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/packs", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.PackListResponse](t, resp)
+		if result.Total != 0 {
+			t.Fatalf("expected total=0, got %d", result.Total)
+		}
+		if len(result.Items) != 0 {
+			t.Fatalf("expected 0 items, got %d", len(result.Items))
+		}
+	})
+
+	// 2. Seed 3 packs with lessons and cards
+	pack1ID := uuid.New().String()
+	pack2ID := uuid.New().String()
+	pack3ID := uuid.New().String()
+
+	lesson1ID := uuid.New().String()
+	lesson2ID := uuid.New().String()
+	lesson3ID := uuid.New().String()
+
+	card1ID := uuid.New().String()
+	card2ID := uuid.New().String()
+	card3ID := uuid.New().String()
+
+	env.seedPack(t, pack1ID, "official", "Tech Pack", "tech", "B1")
+	env.seedPack(t, pack2ID, "official", "Travel Pack", "travel", "A2")
+	env.seedPack(t, pack3ID, "ai", "General Pack", "general", "B1")
+
+	env.seedLesson(t, lesson1ID, pack1ID, "Lesson 1", "reading", 1)
+	env.seedLesson(t, lesson2ID, pack1ID, "Lesson 2", "listening", 2)
+	env.seedLesson(t, lesson3ID, pack2ID, "Lesson 1", "mixed", 1)
+
+	env.seedCard(t, card1ID, lesson1ID, "front-1", "back-1")
+	env.seedCard(t, card2ID, lesson1ID, "front-2", "back-2")
+	env.seedCard(t, card3ID, lesson2ID, "front-3", "back-3")
+
+	// 3. List packs (all)
+	t.Run("List packs all", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/packs", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.PackListResponse](t, resp)
+		if result.Total != 3 {
+			t.Fatalf("expected total=3, got %d", result.Total)
+		}
+		if len(result.Items) != 3 {
+			t.Fatalf("expected 3 items, got %d", len(result.Items))
+		}
+	})
+
+	// 4. List packs filter domain=tech
+	t.Run("List packs filter domain", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/packs?domain=tech", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.PackListResponse](t, resp)
+		if result.Total != 1 {
+			t.Fatalf("expected total=1, got %d", result.Total)
+		}
+	})
+
+	// 5. List packs filter level=B1
+	t.Run("List packs filter level", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/packs?level=B1", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.PackListResponse](t, resp)
+		if result.Total != 2 {
+			t.Fatalf("expected total=2, got %d", result.Total)
+		}
+	})
+
+	// 6. List packs pagination page_size=2
+	t.Run("List packs pagination", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/packs?page_size=2", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.PackListResponse](t, resp)
+		if result.Total != 3 {
+			t.Fatalf("expected total=3, got %d", result.Total)
+		}
+		if len(result.Items) != 2 {
+			t.Fatalf("expected 2 items, got %d", len(result.Items))
+		}
+		if result.PageSize != 2 {
+			t.Fatalf("expected page_size=2, got %d", result.PageSize)
+		}
+	})
+
+	// 7. Get pack detail
+	t.Run("Get pack detail", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/packs/"+pack1ID, accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.PackDetailResponse](t, resp)
+		if result.Pack.ID != pack1ID {
+			t.Fatalf("expected pack id=%s, got %s", pack1ID, result.Pack.ID)
+		}
+		if result.Pack.Title != "Tech Pack" {
+			t.Fatalf("expected title=Tech Pack, got %s", result.Pack.Title)
+		}
+		if len(result.Lessons) != 2 {
+			t.Fatalf("expected 2 lessons, got %d", len(result.Lessons))
+		}
+		if result.Lessons[0].Position != 1 {
+			t.Fatalf("expected first lesson position=1, got %d", result.Lessons[0].Position)
+		}
+	})
+
+	// 8. Get nonexistent pack
+	t.Run("Get nonexistent pack", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/packs/"+uuid.New().String(), accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.StatusCode)
+		}
+	})
+
+	// 9. Enroll pack
+	t.Run("Enroll pack", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/packs/"+pack1ID+"/enroll", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.GenericMessage](t, resp)
+		if result.Message == "" {
+			t.Fatal("expected non-empty message")
+		}
+	})
+
+	// 10. Enroll same pack again (idempotent)
+	t.Run("Enroll same pack again", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/packs/"+pack1ID+"/enroll", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200 (idempotent), got %d: %s", resp.StatusCode, body)
+		}
+	})
+
+	// 11. Review queue shows enrolled cards
+	t.Run("Review queue shows enrolled cards", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/reviews/queue", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		queue := decodeJSON[dto.ReviewQueueResponse](t, resp)
+		if queue.DueCount < 3 {
+			t.Fatalf("expected due_count >= 3, got %d", queue.DueCount)
+		}
+	})
+
+	// 12. Create generation job (with days omitted -> default 7)
+	var jobID string
+	t.Run("Create generation job without days", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{
+			"level":         "B1",
+			"domain":        "tech",
+			"daily_minutes": 20,
+			"focus_skills":  []string{"reading", "listening"},
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusAccepted {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 202, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.GenerationJobResponse](t, resp)
+		if result.JobID == "" {
+			t.Fatal("expected non-empty job_id")
+		}
+		if result.Status != "queued" {
+			t.Fatalf("expected status=queued, got %s", result.Status)
+		}
+		jobID = result.JobID
+	})
+
+	// 12b. Create generation job with explicit days
+	t.Run("Create generation job with days", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{
+			"level":         "B1",
+			"domain":        "tech",
+			"daily_minutes": 20,
+			"days":          7,
+			"focus_skills":  []string{"reading", "listening"},
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusAccepted {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 202, got %d: %s", resp.StatusCode, body)
+		}
+	})
+
+	// 13. Create generation job bad input (invalid level)
+	t.Run("Create generation job bad input", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{
+			"level": "INVALID",
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+	})
+
+	// 13b. Create generation job daily_minutes too low (4 < min 5)
+	t.Run("Create generation job daily_minutes too low", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{
+			"level":         "B1",
+			"domain":        "tech",
+			"daily_minutes": 4,
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+	})
+
+	// 13c. Create generation job days too low (2 < min 3)
+	t.Run("Create generation job days too low", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{
+			"level":         "B1",
+			"domain":        "tech",
+			"daily_minutes": 20,
+			"days":          2,
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+	})
+
+	// 13d. Create generation job days too high (15 > max 14)
+	t.Run("Create generation job days too high", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{
+			"level":         "B1",
+			"domain":        "tech",
+			"daily_minutes": 20,
+			"days":          15,
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+	})
+
+	// 14. Get generation job
+	t.Run("Get generation job", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/packs/generation-jobs/"+jobID, accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.GenerationJobResponse](t, resp)
+		if result.JobID != jobID {
+			t.Fatalf("expected job_id=%s, got %s", jobID, result.JobID)
+		}
+		if result.Status != "queued" {
+			t.Fatalf("expected status=queued, got %s", result.Status)
+		}
+	})
+
+	// 15. Get nonexistent job
+	t.Run("Get nonexistent job", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/packs/generation-jobs/"+uuid.New().String(), accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.StatusCode)
+		}
 	})
 }
 
