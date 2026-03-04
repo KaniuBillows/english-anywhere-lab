@@ -6,6 +6,10 @@ info:
     Single OpenAPI contract for English Anywhere Lab.
     Base path is /api/v1.
     This file is the only source of truth for API schema.
+
+    Operations marked with `x-implemented: true` are live and covered by
+    integration tests. Operations with `x-implemented: false` are roadmap
+    placeholders — do NOT include them in contract tests or QA automation.
 servers:
   - url: /api/v1
 tags:
@@ -25,6 +29,7 @@ paths:
       tags: [Auth]
       summary: Register a user
       operationId: register
+      x-implemented: true
       security: []
       requestBody:
         required: true
@@ -48,6 +53,7 @@ paths:
       tags: [Auth]
       summary: Login with email and password
       operationId: login
+      x-implemented: true
       security: []
       requestBody:
         required: true
@@ -69,6 +75,7 @@ paths:
       tags: [Auth]
       summary: Refresh access token
       operationId: refreshToken
+      x-implemented: true
       security: []
       requestBody:
         required: true
@@ -91,6 +98,7 @@ paths:
       tags: [Profile]
       summary: Get current user
       operationId: getMe
+      x-implemented: true
       responses:
         '200':
           description: Current user profile
@@ -106,6 +114,7 @@ paths:
       tags: [Profile]
       summary: Update learning profile
       operationId: updateProfile
+      x-implemented: true
       requestBody:
         required: true
         content:
@@ -127,6 +136,7 @@ paths:
       tags: [Plan]
       summary: Bootstrap the first weekly plan
       operationId: bootstrapPlan
+      x-implemented: true
       requestBody:
         required: true
         content:
@@ -148,6 +158,7 @@ paths:
       tags: [Plan]
       summary: Get today's learning plan
       operationId: getTodayPlan
+      x-implemented: true
       parameters:
         - in: query
           name: timezone
@@ -167,6 +178,7 @@ paths:
       tags: [Plan]
       summary: Mark task completed
       operationId: completeTask
+      x-implemented: true
       parameters:
         - $ref: '#/components/parameters/PlanId'
         - $ref: '#/components/parameters/TaskId'
@@ -189,6 +201,7 @@ paths:
       tags: [Review]
       summary: Get due review cards
       operationId: getReviewQueue
+      x-implemented: true
       parameters:
         - in: query
           name: limit
@@ -210,6 +223,7 @@ paths:
       tags: [Review]
       summary: Submit one review result
       operationId: submitReview
+      x-implemented: true
       parameters:
         - in: header
           name: Idempotency-Key
@@ -241,6 +255,7 @@ paths:
       tags: [Pack]
       summary: List learning packs
       operationId: listPacks
+      x-implemented: true
       parameters:
         - in: query
           name: domain
@@ -281,6 +296,7 @@ paths:
       tags: [Pack]
       summary: Get pack detail
       operationId: getPackDetail
+      x-implemented: true
       parameters:
         - $ref: '#/components/parameters/PackId'
       responses:
@@ -298,6 +314,7 @@ paths:
       tags: [Pack]
       summary: Enroll a pack into current learning plan
       operationId: enrollPack
+      x-implemented: true
       parameters:
         - $ref: '#/components/parameters/PackId'
       responses:
@@ -313,6 +330,7 @@ paths:
       tags: [Pack]
       summary: Create AI generation job
       operationId: createPackGenerationJob
+      x-implemented: true
       requestBody:
         required: true
         content:
@@ -334,6 +352,7 @@ paths:
       tags: [Pack]
       summary: Get generation job status
       operationId: getGenerationJob
+      x-implemented: true
       parameters:
         - $ref: '#/components/parameters/JobId'
       responses:
@@ -351,6 +370,7 @@ paths:
       tags: [Progress]
       summary: Get progress summary
       operationId: getProgressSummary
+      x-implemented: true
       parameters:
         - in: query
           name: range
@@ -371,6 +391,7 @@ paths:
       tags: [Progress]
       summary: Get daily progress series
       operationId: getProgressDaily
+      x-implemented: true
       parameters:
         - in: query
           name: from
@@ -397,6 +418,7 @@ paths:
       tags: [Output]
       summary: List output tasks for a lesson
       operationId: listOutputTasks
+      x-implemented: true
       parameters:
         - $ref: '#/components/parameters/LessonId'
       responses:
@@ -412,6 +434,7 @@ paths:
       tags: [Output]
       summary: Submit a writing task for AI feedback
       operationId: submitWriting
+      x-implemented: true
       parameters:
         - $ref: '#/components/parameters/OutputTaskId'
       requestBody:
@@ -437,6 +460,7 @@ paths:
       tags: [Output]
       summary: Get a submission by ID
       operationId: getSubmission
+      x-implemented: true
       parameters:
         - $ref: '#/components/parameters/SubmissionId'
       responses:
@@ -454,6 +478,7 @@ paths:
       tags: [Sync]
       summary: Push offline events with idempotency
       operationId: pushSyncEvents
+      x-implemented: false
       requestBody:
         required: true
         content:
@@ -473,6 +498,7 @@ paths:
       tags: [Sync]
       summary: Pull server-side changes since cursor
       operationId: pullSyncChanges
+      x-implemented: false
       parameters:
         - in: query
           name: cursor
