@@ -958,14 +958,13 @@ func TestPackAPI(t *testing.T) {
 		}
 	})
 
-	// 12. Create generation job
+	// 12. Create generation job (with days omitted -> default 7)
 	var jobID string
-	t.Run("Create generation job", func(t *testing.T) {
+	t.Run("Create generation job without days", func(t *testing.T) {
 		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{
 			"level":         "B1",
 			"domain":        "tech",
 			"daily_minutes": 20,
-			"days":          7,
 			"focus_skills":  []string{"reading", "listening"},
 		}, nil)
 		defer resp.Body.Close()
@@ -985,10 +984,71 @@ func TestPackAPI(t *testing.T) {
 		jobID = result.JobID
 	})
 
-	// 13. Create generation job bad input
+	// 12b. Create generation job with explicit days
+	t.Run("Create generation job with days", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{
+			"level":         "B1",
+			"domain":        "tech",
+			"daily_minutes": 20,
+			"days":          7,
+			"focus_skills":  []string{"reading", "listening"},
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusAccepted {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 202, got %d: %s", resp.StatusCode, body)
+		}
+	})
+
+	// 13. Create generation job bad input (invalid level)
 	t.Run("Create generation job bad input", func(t *testing.T) {
 		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{
 			"level": "INVALID",
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+	})
+
+	// 13b. Create generation job daily_minutes too low (4 < min 5)
+	t.Run("Create generation job daily_minutes too low", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{
+			"level":         "B1",
+			"domain":        "tech",
+			"daily_minutes": 4,
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+	})
+
+	// 13c. Create generation job days too low (2 < min 3)
+	t.Run("Create generation job days too low", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{
+			"level":         "B1",
+			"domain":        "tech",
+			"daily_minutes": 20,
+			"days":          2,
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+	})
+
+	// 13d. Create generation job days too high (15 > max 14)
+	t.Run("Create generation job days too high", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{
+			"level":         "B1",
+			"domain":        "tech",
+			"daily_minutes": 20,
+			"days":          15,
 		}, nil)
 		defer resp.Body.Close()
 

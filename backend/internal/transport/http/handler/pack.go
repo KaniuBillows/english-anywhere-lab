@@ -116,12 +116,17 @@ func (h *PackHandler) CreateGenerationJob(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	days := 7
+	if req.Days != nil {
+		days = *req.Days
+	}
+
 	job, err := h.svc.CreateGenerationJob(r.Context(), pack.GenerateInput{
 		UserID:       userID,
 		Level:        req.Level,
 		Domain:       req.Domain,
 		DailyMinutes: req.DailyMinutes,
-		Days:         req.Days,
+		Days:         days,
 		FocusSkills:  req.FocusSkills,
 	})
 	if err != nil {

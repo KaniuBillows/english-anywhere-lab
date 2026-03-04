@@ -32,8 +32,8 @@ type PackDetailResponse struct {
 type GeneratePackRequest struct {
 	Level        string   `json:"level" validate:"required,oneof=A1 A2 B1 B2 C1 C2"`
 	Domain       string   `json:"domain" validate:"required"`
-	DailyMinutes int      `json:"daily_minutes" validate:"required,min=1,max=180"`
-	Days         int      `json:"days" validate:"required,min=1,max=30"`
+	DailyMinutes int      `json:"daily_minutes" validate:"required,min=5,max=180"`
+	Days         *int     `json:"days" validate:"omitempty,min=3,max=14"`
 	FocusSkills  []string `json:"focus_skills" validate:"dive,oneof=reading listening speaking writing"`
 }
 
