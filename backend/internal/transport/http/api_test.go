@@ -1001,6 +1001,27 @@ func TestPackAPI(t *testing.T) {
 		}
 	})
 
+	// 12c. Third generation job → rate limit (2 per day)
+	t.Run("Create generation job rate limited", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{
+			"level":         "B1",
+			"domain":        "tech",
+			"daily_minutes": 20,
+			"focus_skills":  []string{"reading"},
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusTooManyRequests {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 429, got %d: %s", resp.StatusCode, body)
+		}
+
+		errResp := decodeJSON[dto.ErrorResponse](t, resp)
+		if errResp.Code != "RATE_LIMIT" {
+			t.Fatalf("expected code=RATE_LIMIT, got %s", errResp.Code)
+		}
+	})
+
 	// 13. Create generation job bad input (invalid level)
 	t.Run("Create generation job bad input", func(t *testing.T) {
 		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{

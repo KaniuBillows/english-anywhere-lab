@@ -129,6 +129,10 @@ func (h *PackHandler) CreateGenerationJob(w http.ResponseWriter, r *http.Request
 		Days:         days,
 		FocusSkills:  req.FocusSkills,
 	})
+	if errors.Is(err, pack.ErrDailyLimitReached) {
+		writeError(w, http.StatusTooManyRequests, "RATE_LIMIT", "daily generation limit reached, try again tomorrow")
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to create generation job")
 		return

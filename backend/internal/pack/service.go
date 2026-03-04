@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	ErrPackNotFound = errors.New("pack not found")
-	ErrJobNotFound  = errors.New("generation job not found")
+	ErrPackNotFound      = errors.New("pack not found")
+	ErrJobNotFound       = errors.New("generation job not found")
+	ErrDailyLimitReached = errors.New("daily generation limit reached")
 )
 
 type Service struct {
@@ -132,6 +133,14 @@ type GenerateInput struct {
 }
 
 func (s *Service) CreateGenerationJob(ctx context.Context, input GenerateInput) (*GenerationJob, error) {
+	count, err := s.repo.CountUserJobsToday(ctx, input.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("count user jobs: %w", err)
+	}
+	if count >= 2 {
+		return nil, ErrDailyLimitReached
+	}
+
 	payload, _ := json.Marshal(map[string]any{
 		"level":         input.Level,
 		"domain":        input.Domain,
