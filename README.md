@@ -19,6 +19,7 @@
 - `doc/12-analytics-metrics-dictionary.md`：指标口径与埋点字典
 - `doc/13-content-compliance-policy.md`：版权与合规策略
 - `doc/14-test-strategy.md`：测试策略与发布门禁
+- `doc/15-tts-selection-offline-cpu.md`：离线 TTS 选型（纯 CPU、本地生成、对象存储落盘）
 - `doc/api-openapi-m1.yaml`：`doc/07-openapi-m1.yaml` 的副本，便于 M1 代码生成工具读取
 - `doc/api-openapi.yaml`：`doc/07-openapi.yaml` 的副本，便于后续阶段代码生成工具读取
 
@@ -38,4 +39,5 @@
 13. `doc/12-analytics-metrics-dictionary.md`
 14. `doc/13-content-compliance-policy.md`
 15. `doc/14-test-strategy.md`
-16. `doc/07-openapi.yaml`（后续阶段参考）
+16. `doc/15-tts-selection-offline-cpu.md`
+17. `doc/07-openapi.yaml`（后续阶段参考）
