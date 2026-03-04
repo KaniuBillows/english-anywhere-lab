@@ -1001,6 +1001,27 @@ func TestPackAPI(t *testing.T) {
 		}
 	})
 
+	// 12c. Third generation job → rate limit (2 per day)
+	t.Run("Create generation job rate limited", func(t *testing.T) {
+		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{
+			"level":         "B1",
+			"domain":        "tech",
+			"daily_minutes": 20,
+			"focus_skills":  []string{"reading"},
+		}, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusTooManyRequests {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 429, got %d: %s", resp.StatusCode, body)
+		}
+
+		errResp := decodeJSON[dto.ErrorResponse](t, resp)
+		if errResp.Code != "RATE_LIMIT" {
+			t.Fatalf("expected code=RATE_LIMIT, got %s", errResp.Code)
+		}
+	})
+
 	// 13. Create generation job bad input (invalid level)
 	t.Run("Create generation job bad input", func(t *testing.T) {
 		resp := env.doRequest(t, "POST", "/api/v1/packs/generate", accessToken, map[string]any{
@@ -1194,5 +1215,65 @@ func TestBootstrapPlanRace(t *testing.T) {
 	}
 	if conflictCount != goroutines-1 {
 		t.Errorf("expected %d conflicts (409), got %d", goroutines-1, conflictCount)
+	}
+}
+
+// TestGenerateJobRace fires N concurrent generation requests for the same user.
+// At most 2 should succeed with 202; the rest must get 429 (no 500).
+func TestGenerateJobRace(t *testing.T) {
+	env := newTestEnv(t)
+
+	auth := env.registerUser(t, "race-generate@test.com", "securepassword123")
+	token := auth.Tokens.AccessToken
+
+	const goroutines = 10
+	var wg sync.WaitGroup
+	statuses := make([]int, goroutines)
+
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			resp := env.doRequest(t, "POST", "/api/v1/packs/generate", token, map[string]any{
+				"level":         "B1",
+				"domain":        "tech",
+				"daily_minutes": 20,
+				"focus_skills":  []string{"reading"},
+			}, nil)
+			defer resp.Body.Close()
+			io.ReadAll(resp.Body) // drain
+			statuses[idx] = resp.StatusCode
+		}(i)
+	}
+	wg.Wait()
+
+	acceptedCount := 0
+	rateLimitedCount := 0
+	for i, code := range statuses {
+		switch code {
+		case http.StatusAccepted:
+			acceptedCount++
+		case http.StatusTooManyRequests:
+			rateLimitedCount++
+		default:
+			t.Errorf("goroutine %d: unexpected status %d", i, code)
+		}
+	}
+
+	if acceptedCount > 2 {
+		t.Errorf("expected at most 2 accepted (202), got %d", acceptedCount)
+	}
+	if acceptedCount < 1 {
+		t.Errorf("expected at least 1 accepted (202), got %d", acceptedCount)
+	}
+
+	// Verify DB has at most 2 jobs
+	var jobCount int
+	err := env.db.QueryRow("SELECT COUNT(*) FROM ai_generation_jobs").Scan(&jobCount)
+	if err != nil {
+		t.Fatalf("count jobs: %v", err)
+	}
+	if jobCount > 2 {
+		t.Fatalf("expected at most 2 jobs in DB, got %d", jobCount)
 	}
 }

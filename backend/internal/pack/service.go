@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	ErrPackNotFound = errors.New("pack not found")
-	ErrJobNotFound  = errors.New("generation job not found")
+	ErrPackNotFound      = errors.New("pack not found")
+	ErrJobNotFound       = errors.New("generation job not found")
+	ErrDailyLimitReached = errors.New("daily generation limit reached")
 )
 
 type Service struct {
@@ -152,7 +153,10 @@ func (s *Service) CreateGenerationJob(ctx context.Context, input GenerateInput) 
 		CreatedAt:       time.Now().UTC(),
 	}
 
-	if err := s.repo.CreateGenerationJob(ctx, job); err != nil {
+	if err := s.repo.CreateGenerationJobIfUnderLimit(ctx, job, 2); err != nil {
+		if errors.Is(err, ErrDailyLimitReached) {
+			return nil, ErrDailyLimitReached
+		}
 		return nil, fmt.Errorf("create generation job: %w", err)
 	}
 

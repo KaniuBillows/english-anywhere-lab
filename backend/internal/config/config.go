@@ -20,6 +20,13 @@ type Config struct {
 	SQLitePath        string `envconfig:"SQLITE_PATH" default:"./data/app.db"`
 	SQLiteWAL         bool   `envconfig:"SQLITE_WAL" default:"true"`
 	SQLiteBusyTimeout int    `envconfig:"SQLITE_BUSY_TIMEOUT_MS" default:"5000"`
+
+	// LLM
+	LLMBaseURL    string `envconfig:"LLM_BASE_URL" default:"https://api.openai.com/v1"`
+	LLMAPIKey     string `envconfig:"LLM_API_KEY"`
+	LLMModel      string `envconfig:"LLM_MODEL" default:"gpt-4o-mini"`
+	LLMTimeoutSec int    `envconfig:"LLM_TIMEOUT_SEC" default:"60"`
+	LLMMaxRetries int    `envconfig:"LLM_MAX_RETRIES" default:"2"`
 }
 
 func Load() (*Config, error) {
