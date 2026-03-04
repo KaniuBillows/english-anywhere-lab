@@ -16,7 +16,7 @@
 - 场景：注册登录、今日计划、复习提交、AI 任务状态流转
 
 ### 2.3 契约测试
-- 基于 [07-openapi-m1.yaml](/Users/bennyshi/dev/english-anywhere-lab/doc/07-openapi-m1.yaml)（M1）和 [07-openapi.yaml](/Users/bennyshi/dev/english-anywhere-lab/doc/07-openapi.yaml)（路线图）校验：
+- 基于 [openapi.yaml](/Users/bennyshi/dev/english-anywhere-lab/backend/api/openapi.yaml)（项目唯一契约）校验：
   - 请求参数
   - 响应结构
   - 错误码

@@ -46,37 +46,38 @@ graph TD
 ## 5. 代码结构建议（Go）
 ```text
 english-anywhere-lab/
-  cmd/
+  backend/
+    cmd/
+      api/
+        main.go
+      worker/
+        main.go
+    internal/
+      app/
+        bootstrap.go
+        config.go
+      auth/
+      plan/
+      review/
+      pack/
+      tts/
+      progress/
+      sync/
+      llm/
+      storage/
+      scheduler/
+      job/
+      db/
+        migrations/
+        queries/
+      transport/
+        http/
+          handler/
+          middleware/
+          dto/
+      observability/
     api/
-      main.go
-    worker/
-      main.go
-  internal/
-    app/
-      bootstrap.go
-      config.go
-    auth/
-    plan/
-    review/
-    pack/
-    tts/
-    progress/
-    sync/
-    llm/
-    storage/
-    scheduler/
-    job/
-    db/
-      migrations/
-      queries/
-    transport/
-      http/
-        handler/
-        middleware/
-        dto/
-    observability/
-  api/
-    openapi.yaml
+      openapi.yaml
 ```
 
 ## 6. 模块职责
