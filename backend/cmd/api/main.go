@@ -11,6 +11,7 @@ import (
 
 	"github.com/bennyshi/english-anywhere-lab/internal/app"
 	"github.com/bennyshi/english-anywhere-lab/internal/auth"
+	"github.com/bennyshi/english-anywhere-lab/internal/config"
 	"github.com/bennyshi/english-anywhere-lab/internal/llm"
 	"github.com/bennyshi/english-anywhere-lab/internal/output"
 	"github.com/bennyshi/english-anywhere-lab/internal/pack"
@@ -52,7 +53,7 @@ func main() {
 	outputRepo := output.NewRepository(application.DB)
 	outputSvc := output.NewService(outputRepo, llmClient)
 
-	r := router.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc, packSvc, outputSvc)
+	r := router.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc, packSvc, outputSvc, filesLocalRoot(application.Config))
 
 	srv := &http.Server{
 		Addr:         application.Config.HTTPAddr,
@@ -78,4 +79,11 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	srv.Shutdown(ctx)
+}
+
+func filesLocalRoot(cfg *config.Config) string {
+	if cfg.FilesProvider == "local" {
+		return cfg.FilesLocalRoot
+	}
+	return ""
 }

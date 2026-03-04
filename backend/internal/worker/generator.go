@@ -11,6 +11,7 @@ import (
 
 	"github.com/bennyshi/english-anywhere-lab/internal/llm"
 	"github.com/bennyshi/english-anywhere-lab/internal/pack"
+	"github.com/google/uuid"
 )
 
 type Generator struct {
@@ -119,5 +120,45 @@ func (g *Generator) ProcessJob(ctx context.Context, job *pack.GenerationJob) err
 		return fmt.Errorf("update job status to success: %w", err)
 	}
 	g.logger.Info("pack created", "job_id", job.ID, "pack_id", packID)
+
+	// Enqueue TTS jobs for all cards (best-effort)
+	if err := g.enqueueTTSJobs(ctx, packID, job.UserID); err != nil {
+		g.logger.Warn("failed to enqueue TTS jobs", "pack_id", packID, "error", err)
+	}
+	return nil
+}
+
+// enqueueTTSJobs creates tts_generation jobs for all cards in the pack that have front_text.
+func (g *Generator) enqueueTTSJobs(ctx context.Context, packID, userID string) error {
+	cards, err := g.repo.GetCardsByPack(ctx, packID)
+	if err != nil {
+		return fmt.Errorf("get cards: %w", err)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, card := range cards {
+		if card.FrontText == "" {
+			continue
+		}
+		payload, err := json.Marshal(map[string]string{
+			"card_id": card.ID,
+			"text":    card.FrontText,
+			"field":   "front_text",
+		})
+		if err != nil {
+			return fmt.Errorf("marshal TTS payload: %w", err)
+		}
+
+		jobID := uuid.New().String()
+		_, err = g.db.ExecContext(ctx,
+			`INSERT INTO ai_generation_jobs (id, user_id, job_type, domain, level, template_version, request_payload, status, created_at)
+			 VALUES (?, ?, 'tts_generation', 'general', 'A1', 'v1', ?, 'queued', ?)`,
+			jobID, userID, string(payload), now,
+		)
+		if err != nil {
+			return fmt.Errorf("insert TTS job for card %s: %w", card.ID, err)
+		}
+	}
+	g.logger.Info("enqueued TTS jobs", "pack_id", packID, "count", len(cards))
 	return nil
 }

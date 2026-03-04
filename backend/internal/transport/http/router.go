@@ -26,6 +26,7 @@ func NewRouter(
 	progressSvc *progress.Service,
 	packSvc *pack.Service,
 	outputSvc *output.Service,
+	filesLocalRoot string,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -38,6 +39,12 @@ func NewRouter(
 
 	// Health check
 	r.Get("/health", handler.Health)
+
+	// Static file serving for local object storage
+	if filesLocalRoot != "" {
+		fileServer := nethttp.FileServer(nethttp.Dir(filesLocalRoot))
+		r.Handle("/static/files/*", nethttp.StripPrefix("/static/files", fileServer))
+	}
 
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {

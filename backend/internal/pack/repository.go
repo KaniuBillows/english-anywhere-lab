@@ -276,7 +276,7 @@ func (r *Repository) ClaimNextJob(ctx context.Context) (*GenerationJob, error) {
 		`UPDATE ai_generation_jobs
 		 SET status = 'running', started_at = ?
 		 WHERE id = (
-		   SELECT id FROM ai_generation_jobs WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1
+		   SELECT id FROM ai_generation_jobs WHERE job_type = 'pack_generation' AND status = 'queued' ORDER BY created_at ASC LIMIT 1
 		 )
 		 RETURNING id, user_id, job_type, domain, level, template_version, request_payload, response_payload, status, error_message, created_at, started_at, finished_at`,
 		now,

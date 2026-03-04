@@ -27,6 +27,29 @@ type Config struct {
 	LLMModel      string `envconfig:"LLM_MODEL" default:"gpt-4o-mini"`
 	LLMTimeoutSec int    `envconfig:"LLM_TIMEOUT_SEC" default:"60"`
 	LLMMaxRetries int    `envconfig:"LLM_MAX_RETRIES" default:"2"`
+
+	// Storage
+	FilesProvider       string `envconfig:"FILES_PROVIDER" default:"local"`
+	FilesLocalRoot      string `envconfig:"FILES_LOCAL_ROOT" default:"./data/files"`
+	FilesBaseURL        string `envconfig:"FILES_BASE_URL" default:"/static/files"`
+	FilesS3Endpoint     string `envconfig:"FILES_S3_ENDPOINT"`
+	FilesS3Region       string `envconfig:"FILES_S3_REGION"`
+	FilesS3Bucket       string `envconfig:"FILES_S3_BUCKET"`
+	FilesS3AccessKey    string `envconfig:"FILES_S3_ACCESS_KEY"`
+	FilesS3SecretKey    string `envconfig:"FILES_S3_SECRET_KEY"`
+	FilesS3ForcePathStyle bool  `envconfig:"FILES_S3_FORCE_PATH_STYLE" default:"true"`
+	FilesS3PublicURL    string `envconfig:"FILES_S3_PUBLIC_URL"`
+
+	// TTS
+	TTSEnabled           bool    `envconfig:"TTS_ENABLED" default:"false"`
+	TTSProvider          string  `envconfig:"TTS_PROVIDER" default:"stub"`
+	TTSVoice             string  `envconfig:"TTS_VOICE" default:"en_default_female"`
+	TTSSampleRate        int     `envconfig:"TTS_SAMPLE_RATE" default:"22050"`
+	TTSSpeed             float32 `envconfig:"TTS_SPEED" default:"1.0"`
+	TTSOutputFormat      string  `envconfig:"TTS_OUTPUT_FORMAT" default:"wav"`
+	TTSMaxTextChars      int     `envconfig:"TTS_MAX_TEXT_CHARS" default:"280"`
+	TTSWorkerConcurrency int     `envconfig:"TTS_WORKER_CONCURRENCY" default:"2"`
+	TTSRetryMax          int     `envconfig:"TTS_RETRY_MAX" default:"2"`
 }
 
 func Load() (*Config, error) {

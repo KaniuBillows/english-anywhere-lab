@@ -360,3 +360,85 @@ func TestProcessJob_LLMServerError(t *testing.T) {
 		t.Fatal("expected error for LLM server error")
 	}
 }
+
+func TestProcessJob_EnqueuesTTSJobs(t *testing.T) {
+	database := setupTestDB(t)
+	userID := seedUser(t, database)
+	seedJob(t, database, userID)
+
+	// Mock LLM server
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		resp := map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]string{"content": validLLMResponse}},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer mockServer.Close()
+
+	cfg := &config.Config{
+		LLMBaseURL:    mockServer.URL,
+		LLMAPIKey:     "test-key",
+		LLMModel:      "test-model",
+		LLMTimeoutSec: 30,
+		LLMMaxRetries: 0,
+	}
+	llmClient := llm.NewClient(cfg)
+	repo := pack.NewRepository(database)
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+
+	gen := worker.NewGenerator(repo, llmClient, database, logger)
+
+	job, err := repo.ClaimNextJob(context.Background())
+	if err != nil {
+		t.Fatalf("claim job: %v", err)
+	}
+
+	err = gen.ProcessJob(context.Background(), job)
+	if err != nil {
+		t.Fatalf("process job: %v", err)
+	}
+
+	// Verify TTS jobs were created for all 6 cards
+	var ttsJobCount int
+	err = database.QueryRow("SELECT COUNT(*) FROM ai_generation_jobs WHERE job_type = 'tts_generation'").Scan(&ttsJobCount)
+	if err != nil {
+		t.Fatalf("count TTS jobs: %v", err)
+	}
+	if ttsJobCount != 6 {
+		t.Fatalf("expected 6 TTS jobs, got %d", ttsJobCount)
+	}
+
+	// Verify TTS job payloads have card_id and text
+	rows, err := database.Query("SELECT request_payload FROM ai_generation_jobs WHERE job_type = 'tts_generation'")
+	if err != nil {
+		t.Fatalf("query TTS jobs: %v", err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var payload string
+		if err := rows.Scan(&payload); err != nil {
+			t.Fatalf("scan payload: %v", err)
+		}
+		var p map[string]string
+		if err := json.Unmarshal([]byte(payload), &p); err != nil {
+			t.Fatalf("unmarshal payload: %v", err)
+		}
+		if p["card_id"] == "" {
+			t.Fatal("TTS job payload missing card_id")
+		}
+		if p["text"] == "" {
+			t.Fatal("TTS job payload missing text")
+		}
+		if p["field"] != "front_text" {
+			t.Fatalf("expected field=front_text, got %s", p["field"])
+		}
+	}
+}
+
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewJSONHandler(io.Discard, nil))
+}
