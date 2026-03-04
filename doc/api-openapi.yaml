@@ -3,9 +3,9 @@ info:
   title: English Anywhere Lab API
   version: 0.3.0
   description: |
-    API contract for English Anywhere Lab.
+    Full roadmap API contract for English Anywhere Lab.
     Base path is /api/v1.
-    Covers M1 (Auth, Profile, Plan, Review, Progress), R2-Step1 (Pack), and R2-Step3 (Output).
+    For M1 implementation and acceptance, use doc/07-openapi-m1.yaml as source of truth.
 servers:
   - url: /api/v1
 tags:
@@ -16,6 +16,7 @@ tags:
   - name: Pack
   - name: Progress
   - name: Output
+  - name: Sync
 security:
   - bearerAuth: []
 paths:
@@ -223,7 +224,13 @@ paths:
               $ref: '#/components/schemas/ReviewSubmitRequest'
       responses:
         '200':
-          description: Review accepted (duplicate Idempotency-Key or client_event_id returns the original result with 200)
+          description: Review accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewSubmitResponse'
+        '409':
+          description: Duplicate idempotency key accepted as success
           content:
             application/json:
               schema:
@@ -442,6 +449,52 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /sync/events:
+    post:
+      tags: [Sync]
+      summary: Push offline events with idempotency
+      operationId: pushSyncEvents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncEventsRequest'
+      responses:
+        '200':
+          description: Ack statuses per event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncEventsResponse'
+
+  /sync/changes:
+    get:
+      tags: [Sync]
+      summary: Pull server-side changes since cursor
+      operationId: pullSyncChanges
+      parameters:
+        - in: query
+          name: cursor
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 200
+      responses:
+        '200':
+          description: Server change set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncChangesResponse'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -536,6 +589,13 @@ components:
     CefrLevel:
       type: string
       enum: [A1, A2, B1, B2, C1, C2]
+
+    GenericMessage:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
 
     ErrorResponse:
       type: object
@@ -690,9 +750,6 @@ components:
           enum: [pending, in_progress, completed]
         estimated_minutes:
           type: integer
-        virtual:
-          type: boolean
-          description: If true, this task is dynamically injected (e.g. due review cards) and cannot be completed via the complete-task endpoint.
       required: [task_id, task_type, title, status, estimated_minutes]
 
     DailyPlan:
@@ -830,55 +887,6 @@ components:
           enum: [learning, review, relearning]
       required: [accepted, card_id, next_due_at, scheduled_days, status]
 
-    ProgressSummaryResponse:
-      type: object
-      properties:
-        range:
-          type: string
-        total_minutes:
-          type: integer
-        active_days:
-          type: integer
-        review_accuracy:
-          type: number
-          format: float
-        cards_reviewed:
-          type: integer
-        streak_count:
-          type: integer
-      required: [range, total_minutes, active_days, review_accuracy, cards_reviewed, streak_count]
-
-    ProgressDailyPoint:
-      type: object
-      properties:
-        date:
-          type: string
-          format: date
-        minutes_learned:
-          type: integer
-        cards_reviewed:
-          type: integer
-        review_accuracy:
-          type: number
-          format: float
-      required: [date, minutes_learned, cards_reviewed]
-
-    ProgressDailyResponse:
-      type: object
-      properties:
-        points:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProgressDailyPoint'
-      required: [points]
-
-    GenericMessage:
-      type: object
-      properties:
-        message:
-          type: string
-      required: [message]
-
     Pack:
       type: object
       properties:
@@ -985,6 +993,123 @@ components:
           type: string
           nullable: true
       required: [job_id, status, created_at]
+
+    ProgressSummaryResponse:
+      type: object
+      properties:
+        range:
+          type: string
+        total_minutes:
+          type: integer
+        active_days:
+          type: integer
+        review_accuracy:
+          type: number
+          format: float
+        cards_reviewed:
+          type: integer
+        streak_count:
+          type: integer
+      required: [range, total_minutes, active_days, review_accuracy, cards_reviewed, streak_count]
+
+    ProgressDailyPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        minutes_learned:
+          type: integer
+        cards_reviewed:
+          type: integer
+        review_accuracy:
+          type: number
+          format: float
+      required: [date, minutes_learned, cards_reviewed]
+
+    ProgressDailyResponse:
+      type: object
+      properties:
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgressDailyPoint'
+      required: [points]
+
+    SyncEvent:
+      type: object
+      properties:
+        client_event_id:
+          type: string
+          format: uuid
+        event_type:
+          type: string
+          enum: [review_submitted, output_submitted, task_completed, profile_updated]
+        occurred_at:
+          type: string
+          format: date-time
+        payload:
+          type: object
+          additionalProperties: true
+      required: [client_event_id, event_type, occurred_at, payload]
+
+    SyncEventsRequest:
+      type: object
+      properties:
+        events:
+          type: array
+          maxItems: 500
+          items:
+            $ref: '#/components/schemas/SyncEvent'
+      required: [events]
+
+    SyncEventAck:
+      type: object
+      properties:
+        client_event_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [accepted, duplicate, rejected]
+        reason:
+          type: string
+          nullable: true
+      required: [client_event_id, status]
+
+    SyncEventsResponse:
+      type: object
+      properties:
+        acks:
+          type: array
+          items:
+            $ref: '#/components/schemas/SyncEventAck'
+        server_cursor:
+          type: string
+      required: [acks, server_cursor]
+
+    SyncChangesResponse:
+      type: object
+      properties:
+        next_cursor:
+          type: string
+        changes:
+          type: array
+          items:
+            type: object
+            properties:
+              entity_type:
+                type: string
+              entity_id:
+                type: string
+              op:
+                type: string
+                enum: [upsert, delete]
+              payload:
+                type: object
+                additionalProperties: true
+            required: [entity_type, entity_id, op, payload]
+      required: [next_cursor, changes]
 
     OutputTask:
       type: object

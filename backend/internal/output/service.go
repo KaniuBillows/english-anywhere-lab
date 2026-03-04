@@ -16,6 +16,7 @@ var (
 	ErrTaskNotFound       = errors.New("output task not found")
 	ErrSubmissionNotFound = errors.New("submission not found")
 	ErrNotWritingTask     = errors.New("task is not a writing task")
+	ErrInvalidFeedback    = errors.New("LLM returned invalid feedback")
 )
 
 // LLMCaller abstracts the LLM chat completion call for testability.
@@ -75,7 +76,8 @@ func (s *Service) ListTasks(ctx context.Context, lessonID string) ([]OutputTask,
 	return tasks, nil
 }
 
-// Submit handles a writing task submission: validates, inserts, calls LLM, updates, and returns.
+// Submit handles a writing task submission: validates task, calls LLM, validates feedback,
+// then atomically inserts the submission and increments progress.
 func (s *Service) Submit(ctx context.Context, input SubmitInput) (*SubmitResult, error) {
 	// Get and validate the task
 	task, err := s.repo.GetTask(ctx, input.TaskID)
@@ -90,42 +92,37 @@ func (s *Service) Submit(ctx context.Context, input SubmitInput) (*SubmitResult,
 		return nil, ErrNotWritingTask
 	}
 
-	// Insert submission (without feedback initially)
-	now := time.Now().UTC().Format(time.RFC3339)
-	sub := &OutputSubmission{
-		ID:          uuid.New().String(),
-		UserID:      input.UserID,
-		TaskID:      input.TaskID,
-		AnswerText:  sql.NullString{String: input.AnswerText, Valid: true},
-		SubmittedAt: now,
-	}
-	if err := s.repo.InsertSubmission(ctx, sub); err != nil {
-		return nil, fmt.Errorf("insert submission: %w", err)
-	}
-
-	// Call LLM for feedback
+	// Call LLM for feedback BEFORE any DB writes
 	messages := BuildWritingFeedbackPrompt(task, input.AnswerText)
 	rawFeedback, err := s.llmCaller.ChatCompletion(ctx, messages)
 	if err != nil {
 		return nil, fmt.Errorf("llm call: %w", err)
 	}
 
-	// Parse feedback
+	// Parse and validate feedback
 	var feedback WritingFeedback
 	if err := json.Unmarshal([]byte(rawFeedback), &feedback); err != nil {
 		return nil, fmt.Errorf("parse feedback: %w", err)
 	}
+	if err := validateFeedback(&feedback); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidFeedback, err)
+	}
 
 	score := float64(feedback.OverallScore)
 
-	// Update submission with feedback
-	if err := s.repo.UpdateSubmissionFeedback(ctx, sub.ID, rawFeedback, score); err != nil {
-		return nil, fmt.Errorf("update feedback: %w", err)
+	// Atomically insert submission + increment progress (only after LLM succeeds)
+	now := time.Now().UTC().Format(time.RFC3339)
+	sub := &OutputSubmission{
+		ID:          uuid.New().String(),
+		UserID:      input.UserID,
+		TaskID:      input.TaskID,
+		AnswerText:  sql.NullString{String: input.AnswerText, Valid: true},
+		AIFeedback:  sql.NullString{String: rawFeedback, Valid: true},
+		Score:       sql.NullFloat64{Float64: score, Valid: true},
+		SubmittedAt: now,
 	}
-
-	// Increment progress
-	if err := s.repo.IncrementWritingTasksCompleted(ctx, input.UserID); err != nil {
-		return nil, fmt.Errorf("increment progress: %w", err)
+	if err := s.repo.InsertSubmissionWithProgress(ctx, sub); err != nil {
+		return nil, fmt.Errorf("insert submission: %w", err)
 	}
 
 	return &SubmitResult{
@@ -136,6 +133,23 @@ func (s *Service) Submit(ctx context.Context, input SubmitInput) (*SubmitResult,
 		Score:        score,
 		SubmittedAt:  now,
 	}, nil
+}
+
+// validateFeedback checks that LLM feedback meets required structure and ranges.
+func validateFeedback(f *WritingFeedback) error {
+	if f.OverallScore < 0 || f.OverallScore > 100 {
+		return fmt.Errorf("overall_score %d out of range [0,100]", f.OverallScore)
+	}
+	if f.RevisedText == "" {
+		return fmt.Errorf("revised_text is empty")
+	}
+	if len(f.NextActions) == 0 {
+		return fmt.Errorf("next_actions is empty")
+	}
+	if f.Errors == nil {
+		f.Errors = []WritingError{}
+	}
+	return nil
 }
 
 // GetSubmission retrieves a submission result by ID, scoped to the user.

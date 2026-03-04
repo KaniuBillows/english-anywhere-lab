@@ -79,23 +79,39 @@ func (r *Repository) GetTask(ctx context.Context, taskID string) (*OutputTask, e
 	return &t, nil
 }
 
-// InsertSubmission inserts a new output submission.
-func (r *Repository) InsertSubmission(ctx context.Context, sub *OutputSubmission) error {
-	_, err := r.db.ExecContext(ctx,
+// InsertSubmissionWithProgress inserts a submission (with feedback already populated)
+// and increments the user's daily writing_tasks_completed counter in a single transaction.
+func (r *Repository) InsertSubmissionWithProgress(ctx context.Context, sub *OutputSubmission) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO output_submissions (id, user_id, task_id, answer_text, audio_url, ai_feedback, score, submitted_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		sub.ID, sub.UserID, sub.TaskID, sub.AnswerText, sub.AudioURL, sub.AIFeedback, sub.Score, sub.SubmittedAt,
 	)
-	return err
-}
+	if err != nil {
+		return fmt.Errorf("insert submission: %w", err)
+	}
 
-// UpdateSubmissionFeedback updates the AI feedback and score for a submission.
-func (r *Repository) UpdateSubmissionFeedback(ctx context.Context, submissionID, aiFeedback string, score float64) error {
-	_, err := r.db.ExecContext(ctx,
-		`UPDATE output_submissions SET ai_feedback = ?, score = ? WHERE id = ?`,
-		aiFeedback, score, submissionID,
+	today := time.Now().UTC().Format("2006-01-02")
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO progress_daily (user_id, progress_date, writing_tasks_completed, created_at, updated_at)
+		 VALUES (?, ?, 1, ?, ?)
+		 ON CONFLICT(user_id, progress_date) DO UPDATE SET
+		   writing_tasks_completed = writing_tasks_completed + 1,
+		   updated_at = ?`,
+		sub.UserID, today, now, now, now,
 	)
-	return err
+	if err != nil {
+		return fmt.Errorf("increment progress: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 // GetSubmission returns a submission scoped to a specific user.
@@ -110,20 +126,4 @@ func (r *Repository) GetSubmission(ctx context.Context, submissionID, userID str
 		return nil, err
 	}
 	return &s, nil
-}
-
-// IncrementWritingTasksCompleted upserts today's progress_daily row, incrementing
-// writing_tasks_completed by 1.
-func (r *Repository) IncrementWritingTasksCompleted(ctx context.Context, userID string) error {
-	today := time.Now().UTC().Format("2006-01-02")
-	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := r.db.ExecContext(ctx,
-		`INSERT INTO progress_daily (user_id, progress_date, writing_tasks_completed, created_at, updated_at)
-		 VALUES (?, ?, 1, ?, ?)
-		 ON CONFLICT(user_id, progress_date) DO UPDATE SET
-		   writing_tasks_completed = writing_tasks_completed + 1,
-		   updated_at = ?`,
-		userID, today, now, now, now,
-	)
-	return err
 }
