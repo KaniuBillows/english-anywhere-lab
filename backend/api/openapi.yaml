@@ -413,6 +413,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProgressDailyResponse'
 
+  /progress/weekly-report:
+    get:
+      tags: [Progress]
+      summary: Get weekly report aggregation
+      operationId: getWeeklyReport
+      x-implemented: true
+      parameters:
+        - in: query
+          name: week_start
+          required: true
+          schema:
+            type: string
+            format: date
+          description: ISO 8601 date of a Monday (start of the week)
+      responses:
+        '200':
+          description: Weekly report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeeklyReportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
   /lessons/{lesson_id}/output-tasks:
     get:
       tags: [Output]
@@ -1133,6 +1157,109 @@ components:
           items:
             $ref: '#/components/schemas/ProgressDailyPoint'
       required: [points]
+
+    WeeklyReportDailyPoint:
+      type: object
+      properties:
+        date:
+          type: string
+          format: date
+        minutes_learned:
+          type: integer
+        lessons_completed:
+          type: integer
+        cards_new:
+          type: integer
+        cards_reviewed:
+          type: integer
+        review_accuracy:
+          type: number
+          format: float
+          nullable: true
+        listening_minutes:
+          type: integer
+        speaking_tasks:
+          type: integer
+        writing_tasks:
+          type: integer
+        streak_count:
+          type: integer
+      required: [date, minutes_learned, lessons_completed, cards_new, cards_reviewed, listening_minutes, speaking_tasks, writing_tasks, streak_count]
+
+    ReviewHealth:
+      type: object
+      properties:
+        again:
+          type: integer
+        hard:
+          type: integer
+        good:
+          type: integer
+        easy:
+          type: integer
+        total:
+          type: integer
+        accuracy:
+          type: number
+          format: float
+          nullable: true
+      required: [again, hard, good, easy, total]
+
+    WeeklyComparison:
+      type: object
+      properties:
+        minutes_delta:
+          type: integer
+        active_days_delta:
+          type: integer
+        cards_reviewed_delta:
+          type: integer
+        lessons_delta:
+          type: integer
+        accuracy_delta:
+          type: number
+          format: float
+          nullable: true
+      required: [minutes_delta, active_days_delta, cards_reviewed_delta, lessons_delta]
+
+    WeeklyReportResponse:
+      type: object
+      properties:
+        week_start:
+          type: string
+          format: date
+        total_minutes:
+          type: integer
+        active_days:
+          type: integer
+        cards_reviewed:
+          type: integer
+        cards_new:
+          type: integer
+        lessons_completed:
+          type: integer
+        listening_minutes:
+          type: integer
+        speaking_tasks:
+          type: integer
+        writing_tasks:
+          type: integer
+        streak:
+          type: integer
+        weekly_goal_days:
+          type: integer
+        goal_achieved:
+          type: boolean
+        review_health:
+          $ref: '#/components/schemas/ReviewHealth'
+        daily_breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/WeeklyReportDailyPoint'
+        previous_week_comparison:
+          $ref: '#/components/schemas/WeeklyComparison'
+          nullable: true
+      required: [week_start, total_minutes, active_days, cards_reviewed, cards_new, lessons_completed, listening_minutes, speaking_tasks, writing_tasks, streak, weekly_goal_days, goal_achieved, review_health, daily_breakdown]
 
     SyncEvent:
       type: object

@@ -1713,3 +1713,216 @@ func TestSyncChanges_CursorPagination(t *testing.T) {
 		t.Fatalf("expected 1 change in page 2, got %d", len(page2.Changes))
 	}
 }
+
+// ==================== Weekly Report Tests ====================
+
+func TestWeeklyReport(t *testing.T) {
+	env := newTestEnv(t)
+
+	authResp := env.registerUser(t, "weekly-report@test.com", "securepassword123")
+	accessToken := authResp.Tokens.AccessToken
+	userID := authResp.User.ID
+
+	// Use a known Monday for deterministic tests
+	weekStart := "2026-02-23" // Monday
+	prevWeekStart := "2026-02-16"
+
+	// Seed current week progress_daily (Mon-Sun: Feb 23–Mar 1)
+	for i := 0; i < 5; i++ {
+		date := time.Date(2026, 2, 23+i, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+		_, err := env.db.Exec(
+			`INSERT INTO progress_daily (user_id, progress_date, minutes_learned, lessons_completed, cards_new, cards_reviewed,
+			 review_accuracy, listening_minutes, speaking_tasks_completed, writing_tasks_completed, streak_count)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			userID, date, 30, 2, 5, 10+i, 0.85, 10, 1, 1, i+1,
+		)
+		if err != nil {
+			t.Fatalf("seed current week day %d: %v", i, err)
+		}
+	}
+
+	// Seed previous week progress_daily (Mon-Sun: Feb 16–22)
+	for i := 0; i < 3; i++ {
+		date := time.Date(2026, 2, 16+i, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+		_, err := env.db.Exec(
+			`INSERT INTO progress_daily (user_id, progress_date, minutes_learned, lessons_completed, cards_new, cards_reviewed,
+			 review_accuracy, listening_minutes, speaking_tasks_completed, writing_tasks_completed, streak_count)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			userID, date, 20, 1, 3, 8, 0.80, 5, 0, 0, i+1,
+		)
+		if err != nil {
+			t.Fatalf("seed previous week day %d: %v", i, err)
+		}
+	}
+
+	// Seed review_logs in current week
+	cards := env.seedReviewData(t, userID, 1)
+	cardID := cards[0].CardID
+	stateID := cards[0].StateID
+	ratings := []string{"again", "hard", "good", "good", "easy"}
+	for i, rating := range ratings {
+		reviewedAt := time.Date(2026, 2, 23+i%5, 12, 0, 0, 0, time.UTC).Format(time.RFC3339)
+		_, err := env.db.Exec(
+			`INSERT INTO review_logs (user_id, card_id, user_card_state_id, rating, reviewed_at, client_event_id)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			userID, cardID, stateID, rating, reviewedAt, uuid.New().String(),
+		)
+		if err != nil {
+			t.Fatalf("seed review_log %d: %v", i, err)
+		}
+	}
+
+	// Set weekly_goal_days in user_learning_profiles
+	_, err := env.db.Exec(
+		`UPDATE user_learning_profiles SET weekly_goal_days = 4 WHERE user_id = ?`,
+		userID,
+	)
+	if err != nil {
+		t.Fatalf("update learning profile: %v", err)
+	}
+
+	// Test 1: Valid week_start with seeded data → 200
+	t.Run("Valid weekly report with data", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/progress/weekly-report?week_start="+weekStart, accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.WeeklyReportResponse](t, resp)
+
+		if result.WeekStart != weekStart {
+			t.Fatalf("expected week_start=%s, got %s", weekStart, result.WeekStart)
+		}
+		// 5 days * 30 minutes = 150
+		if result.TotalMinutes != 150 {
+			t.Fatalf("expected total_minutes=150, got %d", result.TotalMinutes)
+		}
+		if result.ActiveDays != 5 {
+			t.Fatalf("expected active_days=5, got %d", result.ActiveDays)
+		}
+		if result.LessonsCompleted != 10 {
+			t.Fatalf("expected lessons_completed=10, got %d", result.LessonsCompleted)
+		}
+		if result.Streak != 5 {
+			t.Fatalf("expected streak=5, got %d", result.Streak)
+		}
+		if result.WeeklyGoalDays != 4 {
+			t.Fatalf("expected weekly_goal_days=4, got %d", result.WeeklyGoalDays)
+		}
+		if !result.GoalAchieved {
+			t.Fatal("expected goal_achieved=true")
+		}
+
+		// Review health
+		if result.ReviewHealth.Again != 1 {
+			t.Fatalf("expected again=1, got %d", result.ReviewHealth.Again)
+		}
+		if result.ReviewHealth.Hard != 1 {
+			t.Fatalf("expected hard=1, got %d", result.ReviewHealth.Hard)
+		}
+		if result.ReviewHealth.Good != 2 {
+			t.Fatalf("expected good=2, got %d", result.ReviewHealth.Good)
+		}
+		if result.ReviewHealth.Easy != 1 {
+			t.Fatalf("expected easy=1, got %d", result.ReviewHealth.Easy)
+		}
+		if result.ReviewHealth.Total != 5 {
+			t.Fatalf("expected total=5, got %d", result.ReviewHealth.Total)
+		}
+		if result.ReviewHealth.Accuracy == nil {
+			t.Fatal("expected non-nil accuracy")
+		}
+		// accuracy = (1+2+1)/5 = 0.8
+		if *result.ReviewHealth.Accuracy < 0.79 || *result.ReviewHealth.Accuracy > 0.81 {
+			t.Fatalf("expected accuracy~0.8, got %f", *result.ReviewHealth.Accuracy)
+		}
+
+		// Daily breakdown
+		if len(result.DailyBreakdown) != 5 {
+			t.Fatalf("expected 5 daily points, got %d", len(result.DailyBreakdown))
+		}
+
+		// Previous week comparison present
+		if result.PreviousWeekComparison == nil {
+			t.Fatal("expected previous_week_comparison to be present")
+		}
+		// current 150min - prev 60min = 90
+		if result.PreviousWeekComparison.MinutesDelta != 90 {
+			t.Fatalf("expected minutes_delta=90, got %d", result.PreviousWeekComparison.MinutesDelta)
+		}
+		// current 5 active - prev 3 active = 2
+		if result.PreviousWeekComparison.ActiveDaysDelta != 2 {
+			t.Fatalf("expected active_days_delta=2, got %d", result.PreviousWeekComparison.ActiveDaysDelta)
+		}
+	})
+
+	// Test 2: Missing week_start → 400
+	t.Run("Missing week_start", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/progress/weekly-report", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+	})
+
+	// Test 3: Non-Monday week_start → 400
+	t.Run("Non-Monday week_start", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/progress/weekly-report?week_start=2026-02-24", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+	})
+
+	// Test 4: No data for week → 200 with zeroed aggregates
+	t.Run("No data for week", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/progress/weekly-report?week_start=2025-01-06", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.WeeklyReportResponse](t, resp)
+		if result.TotalMinutes != 0 {
+			t.Fatalf("expected total_minutes=0, got %d", result.TotalMinutes)
+		}
+		if result.ActiveDays != 0 {
+			t.Fatalf("expected active_days=0, got %d", result.ActiveDays)
+		}
+		if result.GoalAchieved {
+			t.Fatal("expected goal_achieved=false")
+		}
+		if len(result.DailyBreakdown) != 0 {
+			t.Fatalf("expected 0 daily points, got %d", len(result.DailyBreakdown))
+		}
+		if result.PreviousWeekComparison != nil {
+			t.Fatal("expected previous_week_comparison to be nil")
+		}
+	})
+
+	// Test 5: Previous week has data, verify comparison for prev week start
+	t.Run("Report for previous week has no comparison", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/progress/weekly-report?week_start="+prevWeekStart, accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.WeeklyReportResponse](t, resp)
+		if result.TotalMinutes != 60 {
+			t.Fatalf("expected total_minutes=60, got %d", result.TotalMinutes)
+		}
+		if result.PreviousWeekComparison != nil {
+			t.Fatal("expected previous_week_comparison to be nil (no week before)")
+		}
+	})
+}
