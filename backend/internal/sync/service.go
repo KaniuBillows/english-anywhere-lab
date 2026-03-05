@@ -50,6 +50,8 @@ func NewService(repo *Repository, logger *slog.Logger) *Service {
 
 // PushEvents processes a batch of client events.
 // Returns per-event acks and a server cursor (from sync_change_log.seq domain).
+// Returns an error for transient infrastructure failures (DB errors), which
+// should be mapped to HTTP 500 so the client can retry the batch.
 func (s *Service) PushEvents(ctx context.Context, userID string, events []EventInput) ([]EventAck, string, error) {
 	if len(events) > 500 {
 		return nil, "", fmt.Errorf("batch size exceeds 500")
@@ -58,7 +60,11 @@ func (s *Service) PushEvents(ctx context.Context, userID string, events []EventI
 	acks := make([]EventAck, 0, len(events))
 
 	for _, evt := range events {
-		ack := s.processEvent(ctx, userID, evt)
+		ack, err := s.processEvent(ctx, userID, evt)
+		if err != nil {
+			// Infrastructure/transient error — abort batch, let client retry
+			return nil, "", fmt.Errorf("process event %s: %w", evt.ClientEventID, err)
+		}
 		acks = append(acks, ack)
 	}
 
@@ -66,9 +72,7 @@ func (s *Service) PushEvents(ctx context.Context, userID string, events []EventI
 	// so it's in the same domain as pull cursors.
 	maxSeq, err := s.repo.MaxChangeLogSeq(ctx, userID)
 	if err != nil {
-		s.logger.Error("failed to get max change log seq", "user_id", userID, "error", err)
-		// Non-fatal: return "0" cursor if we can't determine seq
-		maxSeq = 0
+		return nil, "", fmt.Errorf("get max change log seq: %w", err)
 	}
 	cursor := strconv.FormatInt(maxSeq, 10)
 
@@ -76,14 +80,16 @@ func (s *Service) PushEvents(ctx context.Context, userID string, events []EventI
 }
 
 // processEvent handles a single event: validate → atomic dedup+store.
-func (s *Service) processEvent(ctx context.Context, userID string, evt EventInput) EventAck {
+// Returns (ack, nil) for successful processing (including validation rejections and duplicates).
+// Returns (_, error) for transient infrastructure failures that should cause the batch to abort.
+func (s *Service) processEvent(ctx context.Context, userID string, evt EventInput) (EventAck, error) {
 	// Validate client_event_id
 	if evt.ClientEventID == "" {
 		return EventAck{
 			ClientEventID: evt.ClientEventID,
 			Status:        "rejected",
 			Reason:        "INVALID_PAYLOAD",
-		}
+		}, nil
 	}
 
 	// Validate event type
@@ -93,7 +99,7 @@ func (s *Service) processEvent(ctx context.Context, userID string, evt EventInpu
 			ClientEventID: evt.ClientEventID,
 			Status:        "rejected",
 			Reason:        "UNKNOWN_EVENT_TYPE",
-		}
+		}, nil
 	}
 
 	// Validate occurred_at
@@ -103,7 +109,7 @@ func (s *Service) processEvent(ctx context.Context, userID string, evt EventInpu
 			ClientEventID: evt.ClientEventID,
 			Status:        "rejected",
 			Reason:        "INVALID_PAYLOAD",
-		}
+		}, nil
 	}
 
 	// Validate payload is valid JSON
@@ -113,32 +119,29 @@ func (s *Service) processEvent(ctx context.Context, userID string, evt EventInpu
 			ClientEventID: evt.ClientEventID,
 			Status:        "rejected",
 			Reason:        "INVALID_PAYLOAD",
-		}
+		}, nil
 	}
 
 	// Atomic insert: event + change log in one transaction.
 	// Only return "accepted" if both succeed.
+	// Infrastructure failures bubble up as errors so the handler returns 500.
 	isDuplicate, err := s.repo.InsertEventAndChangeLog(ctx, userID, evt.ClientEventID, evt.EventType, evt.OccurredAt, string(evt.Payload))
 	if err != nil {
 		s.logger.Error("insert sync event failed", "user_id", userID, "client_event_id", evt.ClientEventID, "error", err)
-		return EventAck{
-			ClientEventID: evt.ClientEventID,
-			Status:        "rejected",
-			Reason:        "INVALID_PAYLOAD",
-		}
+		return EventAck{}, fmt.Errorf("persist event: %w", err)
 	}
 
 	if isDuplicate {
 		return EventAck{
 			ClientEventID: evt.ClientEventID,
 			Status:        "duplicate",
-		}
+		}, nil
 	}
 
 	return EventAck{
 		ClientEventID: evt.ClientEventID,
 		Status:        "accepted",
-	}
+	}, nil
 }
 
 // PullChanges returns server-side changes after the given cursor.
