@@ -478,7 +478,7 @@ paths:
       tags: [Sync]
       summary: Push offline events with idempotency
       operationId: pushSyncEvents
-      x-implemented: false
+      x-implemented: true
       requestBody:
         required: true
         content:
@@ -492,13 +492,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SyncEventsResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /sync/changes:
     get:
       tags: [Sync]
       summary: Pull server-side changes since cursor
       operationId: pullSyncChanges
-      x-implemented: false
+      x-implemented: true
       parameters:
         - in: query
           name: cursor
@@ -606,6 +608,12 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     TooManyRequests:
       description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Transient server error — client should retry the entire batch with exponential backoff
       content:
         application/json:
           schema:

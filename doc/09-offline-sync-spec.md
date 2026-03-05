@@ -67,12 +67,20 @@
 - 客户端在拉取后更新本地镜像（计划、卡片状态、进度摘要）。
 
 ## 7. 失败处理
+
+### 7.1 逐条 rejected（HTTP 200 响应体内）
 - `rejected` 必须返回原因码：
   - `INVALID_PAYLOAD`
   - `UNKNOWN_EVENT_TYPE`
   - `STATE_CONFLICT_UNRESOLVABLE`
   - `AUTH_REQUIRED`
 - 客户端对可修复错误（如认证过期）重试；不可修复错误显示提示并停重试。
+
+### 7.2 服务端瞬态故障（HTTP 5xx）
+- 当服务端遇到数据库忙、IO 故障或事务失败等瞬态问题时，`POST /sync/events` 返回 HTTP 500。
+- 客户端收到 5xx 时应**重试整个批次**，采用指数退避策略（1s, 2s, 4s, 最多 5 次）。
+- 5xx 表示事件可能未被持久化，客户端不应将其中任何事件标记为 acked。
+- 与逐条 `rejected` 的区别：`rejected` 是不可重试的业务拒绝（payload 错误），5xx 是可重试的基础设施故障。
 
 ## 8. 安全与隐私
 - 本地仅缓存必要数据，不缓存明文 token。

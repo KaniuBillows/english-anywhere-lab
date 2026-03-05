@@ -25,6 +25,7 @@ import (
 	"github.com/bennyshi/english-anywhere-lab/internal/progress"
 	"github.com/bennyshi/english-anywhere-lab/internal/review"
 	"github.com/bennyshi/english-anywhere-lab/internal/scheduler"
+	appSync "github.com/bennyshi/english-anywhere-lab/internal/sync"
 	httptransport "github.com/bennyshi/english-anywhere-lab/internal/transport/http"
 	"github.com/bennyshi/english-anywhere-lab/internal/transport/http/dto"
 	"github.com/google/uuid"
@@ -97,7 +98,10 @@ func newTestEnv(t *testing.T) *testEnv {
 	outputRepo := output.NewRepository(database)
 	outputSvc := output.NewService(outputRepo, &mockLLMCaller{})
 
-	router := httptransport.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc, packSvc, outputSvc, httptransport.StaticFilesConfig{})
+	syncRepo := appSync.NewRepository(database)
+	syncSvc := appSync.NewService(syncRepo, application.Logger)
+
+	router := httptransport.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc, packSvc, outputSvc, syncSvc, httptransport.StaticFilesConfig{})
 	server := httptest.NewServer(router)
 
 	t.Cleanup(func() {
@@ -1506,4 +1510,206 @@ func TestOutputTaskAPI(t *testing.T) {
 			t.Fatalf("expected writing_tasks_completed >= 1, got %d", count)
 		}
 	})
+}
+
+// ==================== Sync Endpoint Tests ====================
+
+func TestSyncEvents_PushAndPull(t *testing.T) {
+	env := newTestEnv(t)
+	authResp := env.registerUser(t, "sync@test.com", "password123")
+	token := authResp.Tokens.AccessToken
+
+	// Push events
+	body := map[string]any{
+		"events": []map[string]any{
+			{
+				"client_event_id": uuid.New().String(),
+				"event_type":      "review_submitted",
+				"occurred_at":     time.Now().UTC().Format(time.RFC3339),
+				"payload":         map[string]string{"card_id": "abc", "rating": "good"},
+			},
+			{
+				"client_event_id": uuid.New().String(),
+				"event_type":      "task_completed",
+				"occurred_at":     time.Now().UTC().Format(time.RFC3339),
+				"payload":         map[string]string{"task_id": "xyz"},
+			},
+		},
+	}
+
+	resp := env.doRequest(t, "POST", "/api/v1/sync/events", token, body, nil)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var syncResp dto.SyncEventsResponse
+	json.NewDecoder(resp.Body).Decode(&syncResp)
+
+	if len(syncResp.Acks) != 2 {
+		t.Fatalf("expected 2 acks, got %d", len(syncResp.Acks))
+	}
+	for _, ack := range syncResp.Acks {
+		if ack.Status != "accepted" {
+			t.Fatalf("expected accepted, got %s", ack.Status)
+		}
+	}
+	if syncResp.ServerCursor == "" {
+		t.Fatal("expected non-empty server_cursor")
+	}
+
+	// Pull changes
+	pullResp := env.doRequest(t, "GET", "/api/v1/sync/changes", token, nil, nil)
+	defer pullResp.Body.Close()
+
+	if pullResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", pullResp.StatusCode)
+	}
+
+	var changesResp dto.SyncChangesResponse
+	json.NewDecoder(pullResp.Body).Decode(&changesResp)
+
+	if len(changesResp.Changes) != 2 {
+		t.Fatalf("expected 2 changes, got %d", len(changesResp.Changes))
+	}
+	if changesResp.NextCursor == "" {
+		t.Fatal("expected non-empty next_cursor")
+	}
+}
+
+func TestSyncEvents_DuplicateDedup(t *testing.T) {
+	env := newTestEnv(t)
+	authResp := env.registerUser(t, "syncdedup@test.com", "password123")
+	token := authResp.Tokens.AccessToken
+
+	clientEventID := uuid.New().String()
+	body := map[string]any{
+		"events": []map[string]any{
+			{
+				"client_event_id": clientEventID,
+				"event_type":      "review_submitted",
+				"occurred_at":     time.Now().UTC().Format(time.RFC3339),
+				"payload":         map[string]string{"card_id": "abc"},
+			},
+		},
+	}
+
+	// First push
+	resp1 := env.doRequest(t, "POST", "/api/v1/sync/events", token, body, nil)
+	defer resp1.Body.Close()
+
+	var syncResp1 dto.SyncEventsResponse
+	json.NewDecoder(resp1.Body).Decode(&syncResp1)
+	if syncResp1.Acks[0].Status != "accepted" {
+		t.Fatalf("expected accepted, got %s", syncResp1.Acks[0].Status)
+	}
+
+	// Second push (duplicate)
+	resp2 := env.doRequest(t, "POST", "/api/v1/sync/events", token, body, nil)
+	defer resp2.Body.Close()
+
+	var syncResp2 dto.SyncEventsResponse
+	json.NewDecoder(resp2.Body).Decode(&syncResp2)
+	if syncResp2.Acks[0].Status != "duplicate" {
+		t.Fatalf("expected duplicate, got %s", syncResp2.Acks[0].Status)
+	}
+}
+
+func TestSyncEvents_RejectInvalidType(t *testing.T) {
+	env := newTestEnv(t)
+	authResp := env.registerUser(t, "syncreject@test.com", "password123")
+	token := authResp.Tokens.AccessToken
+
+	body := map[string]any{
+		"events": []map[string]any{
+			{
+				"client_event_id": uuid.New().String(),
+				"event_type":      "invalid_type",
+				"occurred_at":     time.Now().UTC().Format(time.RFC3339),
+				"payload":         map[string]string{"foo": "bar"},
+			},
+		},
+	}
+
+	resp := env.doRequest(t, "POST", "/api/v1/sync/events", token, body, nil)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var syncResp dto.SyncEventsResponse
+	json.NewDecoder(resp.Body).Decode(&syncResp)
+	if syncResp.Acks[0].Status != "rejected" {
+		t.Fatalf("expected rejected, got %s", syncResp.Acks[0].Status)
+	}
+	if syncResp.Acks[0].Reason != "UNKNOWN_EVENT_TYPE" {
+		t.Fatalf("expected UNKNOWN_EVENT_TYPE, got %s", syncResp.Acks[0].Reason)
+	}
+}
+
+func TestSyncEvents_RequiresAuth(t *testing.T) {
+	env := newTestEnv(t)
+
+	body := map[string]any{
+		"events": []map[string]any{
+			{
+				"client_event_id": uuid.New().String(),
+				"event_type":      "review_submitted",
+				"occurred_at":     time.Now().UTC().Format(time.RFC3339),
+				"payload":         map[string]string{"card_id": "abc"},
+			},
+		},
+	}
+
+	// No auth token
+	resp := env.doRequest(t, "POST", "/api/v1/sync/events", "", body, nil)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestSyncChanges_CursorPagination(t *testing.T) {
+	env := newTestEnv(t)
+	authResp := env.registerUser(t, "syncpage@test.com", "password123")
+	token := authResp.Tokens.AccessToken
+
+	// Push 3 events
+	for i := 0; i < 3; i++ {
+		body := map[string]any{
+			"events": []map[string]any{
+				{
+					"client_event_id": uuid.New().String(),
+					"event_type":      "review_submitted",
+					"occurred_at":     time.Now().UTC().Format(time.RFC3339),
+					"payload":         map[string]string{"card_id": fmt.Sprintf("card_%d", i)},
+				},
+			},
+		}
+		resp := env.doRequest(t, "POST", "/api/v1/sync/events", token, body, nil)
+		resp.Body.Close()
+	}
+
+	// Pull with limit=2
+	pullResp := env.doRequest(t, "GET", "/api/v1/sync/changes?limit=2", token, nil, nil)
+	defer pullResp.Body.Close()
+
+	var page1 dto.SyncChangesResponse
+	json.NewDecoder(pullResp.Body).Decode(&page1)
+	if len(page1.Changes) != 2 {
+		t.Fatalf("expected 2 changes in page 1, got %d", len(page1.Changes))
+	}
+
+	// Pull remaining
+	pullResp2 := env.doRequest(t, "GET", "/api/v1/sync/changes?cursor="+page1.NextCursor+"&limit=2", token, nil, nil)
+	defer pullResp2.Body.Close()
+
+	var page2 dto.SyncChangesResponse
+	json.NewDecoder(pullResp2.Body).Decode(&page2)
+	if len(page2.Changes) != 1 {
+		t.Fatalf("expected 1 change in page 2, got %d", len(page2.Changes))
+	}
 }

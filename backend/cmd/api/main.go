@@ -19,6 +19,7 @@ import (
 	"github.com/bennyshi/english-anywhere-lab/internal/progress"
 	"github.com/bennyshi/english-anywhere-lab/internal/review"
 	"github.com/bennyshi/english-anywhere-lab/internal/scheduler"
+	appSync "github.com/bennyshi/english-anywhere-lab/internal/sync"
 	router "github.com/bennyshi/english-anywhere-lab/internal/transport/http"
 )
 
@@ -53,7 +54,10 @@ func main() {
 	outputRepo := output.NewRepository(application.DB)
 	outputSvc := output.NewService(outputRepo, llmClient)
 
-	r := router.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc, packSvc, outputSvc, staticFilesConfig(application.Config))
+	syncRepo := appSync.NewRepository(application.DB)
+	syncSvc := appSync.NewService(syncRepo, application.Logger)
+
+	r := router.NewRouter(application, authSvc, authJWT, reviewSvc, planSvc, progressSvc, packSvc, outputSvc, syncSvc, staticFilesConfig(application.Config))
 
 	srv := &http.Server{
 		Addr:         application.Config.HTTPAddr,
