@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/bennyshi/english-anywhere-lab/internal/progress"
@@ -67,4 +68,76 @@ func (h *ProgressHandler) GetDaily(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, dto.ProgressDailyResponse{Points: points})
+}
+
+func (h *ProgressHandler) GetWeeklyReport(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	weekStart := r.URL.Query().Get("week_start")
+	if weekStart == "" {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "week_start parameter is required (YYYY-MM-DD, must be a Monday)")
+		return
+	}
+
+	result, err := h.svc.GetWeeklyReport(r.Context(), userID, weekStart)
+	if err != nil {
+		var ve *progress.ValidationError
+		if errors.As(err, &ve) {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", ve.Message)
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to get weekly report")
+		return
+	}
+
+	daily := make([]dto.WeeklyReportDailyPoint, 0, len(result.DailyBreakdown))
+	for _, d := range result.DailyBreakdown {
+		daily = append(daily, dto.WeeklyReportDailyPoint{
+			Date:             d.Date,
+			MinutesLearned:   d.MinutesLearned,
+			LessonsCompleted: d.LessonsCompleted,
+			CardsNew:         d.CardsNew,
+			CardsReviewed:    d.CardsReviewed,
+			ReviewAccuracy:   d.ReviewAccuracy,
+			ListeningMinutes: d.ListeningMinutes,
+			SpeakingTasks:    d.SpeakingTasks,
+			WritingTasks:     d.WritingTasks,
+			StreakCount:       d.StreakCount,
+		})
+	}
+
+	resp := dto.WeeklyReportResponse{
+		WeekStart:        result.WeekStart,
+		TotalMinutes:     result.TotalMinutes,
+		ActiveDays:       result.ActiveDays,
+		CardsReviewed:    result.CardsReviewed,
+		CardsNew:         result.CardsNew,
+		LessonsCompleted: result.LessonsCompleted,
+		ListeningMinutes: result.ListeningMinutes,
+		SpeakingTasks:    result.SpeakingTasks,
+		WritingTasks:     result.WritingTasks,
+		Streak:           result.Streak,
+		WeeklyGoalDays:   result.WeeklyGoalDays,
+		GoalAchieved:     result.GoalAchieved,
+		ReviewHealth: dto.ReviewHealth{
+			Again:    result.ReviewHealth.Again,
+			Hard:     result.ReviewHealth.Hard,
+			Good:     result.ReviewHealth.Good,
+			Easy:     result.ReviewHealth.Easy,
+			Total:    result.ReviewHealth.Total,
+			Accuracy: result.ReviewHealth.Accuracy,
+		},
+		DailyBreakdown: daily,
+	}
+
+	if result.PrevWeek != nil {
+		resp.PreviousWeekComparison = &dto.WeeklyComparison{
+			MinutesDelta:       result.PrevWeek.MinutesDelta,
+			ActiveDaysDelta:    result.PrevWeek.ActiveDaysDelta,
+			CardsReviewedDelta: result.PrevWeek.CardsReviewedDelta,
+			LessonsDelta:       result.PrevWeek.LessonsDelta,
+			AccuracyDelta:      result.PrevWeek.AccuracyDelta,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
