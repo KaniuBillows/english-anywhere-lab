@@ -1954,3 +1954,285 @@ func TestWeeklyReport(t *testing.T) {
 		}
 	})
 }
+
+func TestMonthlyReport(t *testing.T) {
+	env := newTestEnv(t)
+
+	authResp := env.registerUser(t, "monthly-report@test.com", "securepassword123")
+	accessToken := authResp.Tokens.AccessToken
+	userID := authResp.User.ID
+
+	// Seed February 2026 data (28 days) — 10 days with varied skill data
+	for i := 0; i < 10; i++ {
+		date := time.Date(2026, 2, 1+i, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+		_, err := env.db.Exec(
+			`INSERT INTO progress_daily (user_id, progress_date, minutes_learned, lessons_completed, cards_new, cards_reviewed,
+			 review_accuracy, listening_minutes, speaking_tasks_completed, writing_tasks_completed, streak_count)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			userID, date, 30, 2, 5, 10, 0.85, 15, 3, 2, i+1,
+		)
+		if err != nil {
+			t.Fatalf("seed feb day %d: %v", i, err)
+		}
+	}
+
+	// Seed January 2026 data (previous month) — 5 days with less data
+	for i := 0; i < 5; i++ {
+		date := time.Date(2026, 1, 10+i, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+		_, err := env.db.Exec(
+			`INSERT INTO progress_daily (user_id, progress_date, minutes_learned, lessons_completed, cards_new, cards_reviewed,
+			 review_accuracy, listening_minutes, speaking_tasks_completed, writing_tasks_completed, streak_count)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			userID, date, 20, 1, 3, 8, 0.80, 10, 2, 1, i+1,
+		)
+		if err != nil {
+			t.Fatalf("seed jan day %d: %v", i, err)
+		}
+	}
+
+	// Seed review_logs in Feb 2026
+	cards := env.seedReviewData(t, userID, 1)
+	cardID := cards[0].CardID
+	stateID := cards[0].StateID
+	ratings := []string{"again", "hard", "good", "good", "easy"}
+	for i, rating := range ratings {
+		reviewedAt := time.Date(2026, 2, 1+i, 12, 0, 0, 0, time.UTC).Format(time.RFC3339)
+		_, err := env.db.Exec(
+			`INSERT INTO review_logs (user_id, card_id, user_card_state_id, rating, reviewed_at, client_event_id)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			userID, cardID, stateID, rating, reviewedAt, uuid.New().String(),
+		)
+		if err != nil {
+			t.Fatalf("seed review_log %d: %v", i, err)
+		}
+	}
+
+	// Set weekly_goal_days
+	_, err := env.db.Exec(
+		`UPDATE user_learning_profiles SET weekly_goal_days = 4 WHERE user_id = ?`,
+		userID,
+	)
+	if err != nil {
+		t.Fatalf("update learning profile: %v", err)
+	}
+
+	// Test 1: Valid month with seeded data → 200
+	t.Run("Valid monthly report with data", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/progress/monthly-report?month=2026-02", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.MonthlyReportResponse](t, resp)
+
+		if result.Month != "2026-02" {
+			t.Fatalf("expected month=2026-02, got %s", result.Month)
+		}
+		if result.DaysInMonth != 28 {
+			t.Fatalf("expected days_in_month=28, got %d", result.DaysInMonth)
+		}
+		// 10 days * 30 minutes = 300
+		if result.TotalMinutes != 300 {
+			t.Fatalf("expected total_minutes=300, got %d", result.TotalMinutes)
+		}
+		if result.ActiveDays != 10 {
+			t.Fatalf("expected active_days=10, got %d", result.ActiveDays)
+		}
+		// 10 days * 2 lessons = 20
+		if result.LessonsCompleted != 20 {
+			t.Fatalf("expected lessons_completed=20, got %d", result.LessonsCompleted)
+		}
+		// 10 days * 10 cards_reviewed = 100
+		if result.CardsReviewed != 100 {
+			t.Fatalf("expected cards_reviewed=100, got %d", result.CardsReviewed)
+		}
+		// streak = max(streak_count) = 10
+		if result.Streak != 10 {
+			t.Fatalf("expected streak=10, got %d", result.Streak)
+		}
+		// monthly_goal_days = 4 * ceil(28/7) = 4*4 = 16
+		if result.MonthlyGoalDays != 16 {
+			t.Fatalf("expected monthly_goal_days=16, got %d", result.MonthlyGoalDays)
+		}
+		// 10 active days < 16 goal → not achieved
+		if result.GoalAchieved {
+			t.Fatal("expected goal_achieved=false")
+		}
+
+		// Review health: 1 again, 1 hard, 2 good, 1 easy
+		if result.ReviewHealth.Again != 1 {
+			t.Fatalf("expected again=1, got %d", result.ReviewHealth.Again)
+		}
+		if result.ReviewHealth.Total != 5 {
+			t.Fatalf("expected total=5, got %d", result.ReviewHealth.Total)
+		}
+		if result.ReviewHealth.Accuracy == nil {
+			t.Fatal("expected non-nil accuracy")
+		}
+
+		// Daily breakdown: 10 rows
+		if len(result.DailyBreakdown) != 10 {
+			t.Fatalf("expected 10 daily points, got %d", len(result.DailyBreakdown))
+		}
+
+		// Skill breakdown: listening=150, speaking=30, writing=20, reading=100+20=120
+		if result.SkillBreakdown.Listening.Value != 150 {
+			t.Fatalf("expected listening=150, got %d", result.SkillBreakdown.Listening.Value)
+		}
+		if result.SkillBreakdown.Speaking.Value != 30 {
+			t.Fatalf("expected speaking=30, got %d", result.SkillBreakdown.Speaking.Value)
+		}
+		if result.SkillBreakdown.Writing.Value != 20 {
+			t.Fatalf("expected writing=20, got %d", result.SkillBreakdown.Writing.Value)
+		}
+		if result.SkillBreakdown.Reading.Value != 120 {
+			t.Fatalf("expected reading=120, got %d", result.SkillBreakdown.Reading.Value)
+		}
+		// Percentages should sum to ~1.0
+		totalPct := result.SkillBreakdown.Listening.Percentage +
+			result.SkillBreakdown.Speaking.Percentage +
+			result.SkillBreakdown.Writing.Percentage +
+			result.SkillBreakdown.Reading.Percentage
+		if totalPct < 0.99 || totalPct > 1.01 {
+			t.Fatalf("expected percentages sum to ~1.0, got %f", totalPct)
+		}
+
+		// Previous month comparison present (Jan has data)
+		if result.PreviousMonthComparison == nil {
+			t.Fatal("expected previous_month_comparison to be present")
+		}
+		// current 300min - prev 100min = 200
+		if result.PreviousMonthComparison.MinutesDelta != 200 {
+			t.Fatalf("expected minutes_delta=200, got %d", result.PreviousMonthComparison.MinutesDelta)
+		}
+		// current 10 active - prev 5 active = 5
+		if result.PreviousMonthComparison.ActiveDaysDelta != 5 {
+			t.Fatalf("expected active_days_delta=5, got %d", result.PreviousMonthComparison.ActiveDaysDelta)
+		}
+	})
+
+	// Test 2: Missing month → 400
+	t.Run("Missing month", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/progress/monthly-report", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+	})
+
+	// Test 3: Invalid month format → 400
+	t.Run("Invalid month format", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/progress/monthly-report?month=2026-02-01", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+	})
+
+	// Test 3b: Invalid month value → 400
+	t.Run("Invalid month value", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/progress/monthly-report?month=2026-13", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+	})
+
+	// Test 4: No data for month → 200 with zeroed aggregates
+	t.Run("No data for month", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/progress/monthly-report?month=2025-06", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.MonthlyReportResponse](t, resp)
+		if result.TotalMinutes != 0 {
+			t.Fatalf("expected total_minutes=0, got %d", result.TotalMinutes)
+		}
+		if result.ActiveDays != 0 {
+			t.Fatalf("expected active_days=0, got %d", result.ActiveDays)
+		}
+		if result.GoalAchieved {
+			t.Fatal("expected goal_achieved=false")
+		}
+		if len(result.DailyBreakdown) != 0 {
+			t.Fatalf("expected 0 daily points, got %d", len(result.DailyBreakdown))
+		}
+		if len(result.Weaknesses) != 0 {
+			t.Fatalf("expected 0 weaknesses (no activity at all), got %d", len(result.Weaknesses))
+		}
+		if result.PreviousMonthComparison != nil {
+			t.Fatal("expected previous_month_comparison to be nil")
+		}
+	})
+
+	// Test 5: Zero listening but non-zero writing → weakness for listening
+	t.Run("Weakness detected for zero-activity skill", func(t *testing.T) {
+		// Seed March 2026 with zero listening but non-zero writing
+		for i := 0; i < 3; i++ {
+			date := time.Date(2026, 3, 1+i, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+			_, err := env.db.Exec(
+				`INSERT INTO progress_daily (user_id, progress_date, minutes_learned, lessons_completed, cards_new, cards_reviewed,
+				 review_accuracy, listening_minutes, speaking_tasks_completed, writing_tasks_completed, streak_count)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				userID, date, 20, 2, 3, 10, 0.90, 0, 0, 5, i+1,
+			)
+			if err != nil {
+				t.Fatalf("seed march day %d: %v", i, err)
+			}
+		}
+
+		resp := env.doRequest(t, "GET", "/api/v1/progress/monthly-report?month=2026-03", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.MonthlyReportResponse](t, resp)
+
+		// Should have weaknesses for listening and speaking (both zero)
+		foundListening := false
+		foundSpeaking := false
+		for _, w := range result.Weaknesses {
+			if w.Skill == "listening" && w.Reason == "low_activity" {
+				foundListening = true
+			}
+			if w.Skill == "speaking" && w.Reason == "low_activity" {
+				foundSpeaking = true
+			}
+		}
+		if !foundListening {
+			t.Fatal("expected weakness for listening (low_activity)")
+		}
+		if !foundSpeaking {
+			t.Fatal("expected weakness for speaking (low_activity)")
+		}
+
+		// Previous month (Feb) has data → comparison present
+		if result.PreviousMonthComparison == nil {
+			t.Fatal("expected previous_month_comparison to be present")
+		}
+	})
+
+	// Test 6: Feb 2026 has 28 days
+	t.Run("February days_in_month", func(t *testing.T) {
+		resp := env.doRequest(t, "GET", "/api/v1/progress/monthly-report?month=2026-02", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		result := decodeJSON[dto.MonthlyReportResponse](t, resp)
+		if result.DaysInMonth != 28 {
+			t.Fatalf("expected days_in_month=28 for Feb 2026, got %d", result.DaysInMonth)
+		}
+	})
+}
