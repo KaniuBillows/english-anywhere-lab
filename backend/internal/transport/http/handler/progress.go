@@ -1,8 +1,8 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/bennyshi/english-anywhere-lab/internal/progress"
 	"github.com/bennyshi/english-anywhere-lab/internal/transport/http/dto"
@@ -80,8 +80,9 @@ func (h *ProgressHandler) GetWeeklyReport(w http.ResponseWriter, r *http.Request
 
 	result, err := h.svc.GetWeeklyReport(r.Context(), userID, weekStart)
 	if err != nil {
-		if isValidationError(err) {
-			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		var ve *progress.ValidationError
+		if errors.As(err, &ve) {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", ve.Message)
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to get weekly report")
@@ -139,10 +140,4 @@ func (h *ProgressHandler) GetWeeklyReport(w http.ResponseWriter, r *http.Request
 	}
 
 	writeJSON(w, http.StatusOK, resp)
-}
-
-// isValidationError checks if the error is a validation/input error vs infra.
-func isValidationError(err error) bool {
-	msg := err.Error()
-	return strings.HasPrefix(msg, "invalid ") || strings.HasPrefix(msg, "week_start ")
 }

@@ -1925,4 +1925,32 @@ func TestWeeklyReport(t *testing.T) {
 			t.Fatal("expected previous_week_comparison to be nil (no week before)")
 		}
 	})
+
+	// Test 6: Previous week has rows with zero minutes but non-zero non-minute metrics
+	t.Run("Prev week zero minutes but non-zero writing tasks", func(t *testing.T) {
+		// Seed a week where prev week (Mar 2) has zero minutes but writing_tasks_completed > 0
+		// Current week: Mar 9 (Monday), prev week: Mar 2 (Monday)
+		_, err := env.db.Exec(
+			`INSERT INTO progress_daily (user_id, progress_date, minutes_learned, lessons_completed, cards_new, cards_reviewed,
+			 review_accuracy, listening_minutes, speaking_tasks_completed, writing_tasks_completed, streak_count)
+			 VALUES (?, '2026-03-02', 0, 0, 0, 0, NULL, 0, 0, 3, 0)`,
+			userID,
+		)
+		if err != nil {
+			t.Fatalf("seed zero-minutes prev week: %v", err)
+		}
+
+		resp := env.doRequest(t, "GET", "/api/v1/progress/weekly-report?week_start=2026-03-09", accessToken, nil, nil)
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+
+		result := decodeJSON[dto.WeeklyReportResponse](t, resp)
+		if result.PreviousWeekComparison == nil {
+			t.Fatal("expected previous_week_comparison to be present (prev week has rows with non-zero writing_tasks)")
+		}
+	})
 }

@@ -54,6 +54,7 @@ func (r *Repository) GetSummary(ctx context.Context, userID string, fromDate tim
 }
 
 type WeeklyAggregate struct {
+	RowCount            int
 	TotalMinutes        int
 	ActiveDays          int
 	CardsReviewed       int
@@ -90,6 +91,7 @@ func (r *Repository) GetWeeklyAggregate(ctx context.Context, userID, weekStart, 
 	a := &WeeklyAggregate{}
 	err := r.db.QueryRowContext(ctx, `
 		SELECT
+			COUNT(*),
 			COALESCE(SUM(minutes_learned), 0),
 			COUNT(CASE WHEN minutes_learned > 0 THEN 1 END),
 			COALESCE(SUM(cards_reviewed), 0),
@@ -104,6 +106,7 @@ func (r *Repository) GetWeeklyAggregate(ctx context.Context, userID, weekStart, 
 		WHERE user_id = ? AND progress_date >= ? AND progress_date <= ?`,
 		userID, weekStart, weekEnd,
 	).Scan(
+		&a.RowCount,
 		&a.TotalMinutes, &a.ActiveDays, &a.CardsReviewed,
 		&a.CardsNew, &a.LessonsCompleted, &a.ListeningMinutes,
 		&a.SpeakingTasks, &a.WritingTasks, &a.MaxStreak,

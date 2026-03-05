@@ -6,6 +6,13 @@ import (
 	"time"
 )
 
+// ValidationError represents a client input validation error.
+type ValidationError struct {
+	Message string
+}
+
+func (e *ValidationError) Error() string { return e.Message }
+
 type Service struct {
 	repo *Repository
 }
@@ -114,10 +121,10 @@ type WeeklyReportResult struct {
 func (s *Service) GetWeeklyReport(ctx context.Context, userID, weekStartStr string) (*WeeklyReportResult, error) {
 	weekStart, err := time.Parse("2006-01-02", weekStartStr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid week_start date format: %s", weekStartStr)
+		return nil, &ValidationError{Message: fmt.Sprintf("invalid week_start date format: %s", weekStartStr)}
 	}
 	if weekStart.Weekday() != time.Monday {
-		return nil, fmt.Errorf("week_start must be a Monday, got %s", weekStart.Weekday())
+		return nil, &ValidationError{Message: fmt.Sprintf("week_start must be a Monday, got %s", weekStart.Weekday())}
 	}
 
 	weekEnd := weekStart.AddDate(0, 0, 6)
@@ -207,8 +214,8 @@ func (s *Service) GetWeeklyReport(ctx context.Context, userID, weekStartStr stri
 		DailyBreakdown:   daily,
 	}
 
-	// Previous week comparison — omit if no data
-	if prevAgg.ActiveDays > 0 || prevAgg.TotalMinutes > 0 {
+	// Previous week comparison — omit only if no rows exist
+	if prevAgg.RowCount > 0 {
 		comp := &WeeklyComparisonResult{
 			MinutesDelta:       currAgg.TotalMinutes - prevAgg.TotalMinutes,
 			ActiveDaysDelta:    currAgg.ActiveDays - prevAgg.ActiveDays,
