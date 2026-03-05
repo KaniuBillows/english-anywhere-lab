@@ -223,7 +223,7 @@ func (r *Repository) CreateGenerationJobIfUnderLimit(ctx context.Context, job *G
 	startOfDay := time.Now().UTC().Truncate(24 * time.Hour).Format(time.RFC3339)
 	var count int
 	err = conn.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM ai_generation_jobs WHERE user_id = ? AND created_at >= ?`,
+		`SELECT COUNT(*) FROM ai_generation_jobs WHERE user_id = ? AND job_type = 'pack_generation' AND created_at >= ?`,
 		job.UserID, startOfDay,
 	).Scan(&count)
 	if err != nil {
@@ -276,7 +276,7 @@ func (r *Repository) ClaimNextJob(ctx context.Context) (*GenerationJob, error) {
 		`UPDATE ai_generation_jobs
 		 SET status = 'running', started_at = ?
 		 WHERE id = (
-		   SELECT id FROM ai_generation_jobs WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1
+		   SELECT id FROM ai_generation_jobs WHERE job_type = 'pack_generation' AND status = 'queued' ORDER BY created_at ASC LIMIT 1
 		 )
 		 RETURNING id, user_id, job_type, domain, level, template_version, request_payload, response_payload, status, error_message, created_at, started_at, finished_at`,
 		now,
@@ -318,12 +318,12 @@ func (r *Repository) UpdateJobStatus(ctx context.Context, jobID, status, respons
 	return nil
 }
 
-// CountUserJobsToday counts the number of generation jobs created today (UTC) by a user.
+// CountUserJobsToday counts the number of pack_generation jobs created today (UTC) by a user.
 func (r *Repository) CountUserJobsToday(ctx context.Context, userID string) (int, error) {
 	startOfDay := time.Now().UTC().Truncate(24 * time.Hour).Format(time.RFC3339)
 	var count int
 	err := r.db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM ai_generation_jobs WHERE user_id = ? AND created_at >= ?`,
+		`SELECT COUNT(*) FROM ai_generation_jobs WHERE user_id = ? AND job_type = 'pack_generation' AND created_at >= ?`,
 		userID, startOfDay,
 	).Scan(&count)
 	return count, err
