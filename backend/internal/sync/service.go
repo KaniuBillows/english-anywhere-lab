@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	"time"
 )
 
 // EventInput represents a single event from the client batch.
@@ -50,7 +49,7 @@ func NewService(repo *Repository, logger *slog.Logger) *Service {
 }
 
 // PushEvents processes a batch of client events.
-// Returns per-event acks and a server cursor.
+// Returns per-event acks and a server cursor (from sync_change_log.seq domain).
 func (s *Service) PushEvents(ctx context.Context, userID string, events []EventInput) ([]EventAck, string, error) {
 	if len(events) > 500 {
 		return nil, "", fmt.Errorf("batch size exceeds 500")
@@ -63,12 +62,20 @@ func (s *Service) PushEvents(ctx context.Context, userID string, events []EventI
 		acks = append(acks, ack)
 	}
 
-	// server_cursor: current timestamp as cursor for the push response
-	cursor := strconv.FormatInt(time.Now().UnixMilli(), 10)
+	// server_cursor: max seq from sync_change_log for this user,
+	// so it's in the same domain as pull cursors.
+	maxSeq, err := s.repo.MaxChangeLogSeq(ctx, userID)
+	if err != nil {
+		s.logger.Error("failed to get max change log seq", "user_id", userID, "error", err)
+		// Non-fatal: return "0" cursor if we can't determine seq
+		maxSeq = 0
+	}
+	cursor := strconv.FormatInt(maxSeq, 10)
+
 	return acks, cursor, nil
 }
 
-// processEvent handles a single event: validate → dedup → store.
+// processEvent handles a single event: validate → atomic dedup+store.
 func (s *Service) processEvent(ctx context.Context, userID string, evt EventInput) EventAck {
 	// Validate client_event_id
 	if evt.ClientEventID == "" {
@@ -109,8 +116,9 @@ func (s *Service) processEvent(ctx context.Context, userID string, evt EventInpu
 		}
 	}
 
-	// Insert with dedup
-	_, isDuplicate, err := s.repo.InsertEvent(ctx, userID, evt.ClientEventID, evt.EventType, evt.OccurredAt, string(evt.Payload))
+	// Atomic insert: event + change log in one transaction.
+	// Only return "accepted" if both succeed.
+	isDuplicate, err := s.repo.InsertEventAndChangeLog(ctx, userID, evt.ClientEventID, evt.EventType, evt.OccurredAt, string(evt.Payload))
 	if err != nil {
 		s.logger.Error("insert sync event failed", "user_id", userID, "client_event_id", evt.ClientEventID, "error", err)
 		return EventAck{
@@ -126,9 +134,6 @@ func (s *Service) processEvent(ctx context.Context, userID string, evt EventInpu
 			Status:        "duplicate",
 		}
 	}
-
-	// Write change log entry for other devices to pull
-	_ = s.repo.InsertChangeLogEntry(ctx, userID, "sync_event", evt.ClientEventID, "upsert", string(evt.Payload))
 
 	return EventAck{
 		ClientEventID: evt.ClientEventID,

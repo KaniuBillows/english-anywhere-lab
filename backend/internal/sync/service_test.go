@@ -496,3 +496,103 @@ func TestPushEvents_AllEventTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestPushCursor_CompatibleWithPullCursor(t *testing.T) {
+	database := setupTestDB(t)
+	userID := seedUser(t, database)
+
+	repo := appSync.NewRepository(database)
+	svc := appSync.NewService(repo, testLogger())
+
+	// Push first event
+	events1 := []appSync.EventInput{
+		{
+			ClientEventID: uuid.New().String(),
+			EventType:     "review_submitted",
+			OccurredAt:    time.Now().UTC().Format(time.RFC3339),
+			Payload:       json.RawMessage(`{"card_id":"card_1"}`),
+		},
+	}
+	_, pushCursor1, err := svc.PushEvents(context.Background(), userID, events1)
+	if err != nil {
+		t.Fatalf("push 1: %v", err)
+	}
+
+	// Push second event
+	events2 := []appSync.EventInput{
+		{
+			ClientEventID: uuid.New().String(),
+			EventType:     "task_completed",
+			OccurredAt:    time.Now().UTC().Format(time.RFC3339),
+			Payload:       json.RawMessage(`{"task_id":"task_1"}`),
+		},
+	}
+	_, pushCursor2, err := svc.PushEvents(context.Background(), userID, events2)
+	if err != nil {
+		t.Fatalf("push 2: %v", err)
+	}
+
+	// Using pushCursor1 as pull cursor should return only the second event
+	result, err := svc.PullChanges(context.Background(), userID, pushCursor1, 200)
+	if err != nil {
+		t.Fatalf("pull with push cursor 1: %v", err)
+	}
+	if len(result.Changes) != 1 {
+		t.Fatalf("expected 1 change after push cursor 1, got %d", len(result.Changes))
+	}
+
+	// Using pushCursor2 as pull cursor should return nothing (already caught up)
+	result2, err := svc.PullChanges(context.Background(), userID, pushCursor2, 200)
+	if err != nil {
+		t.Fatalf("pull with push cursor 2: %v", err)
+	}
+	if len(result2.Changes) != 0 {
+		t.Fatalf("expected 0 changes after push cursor 2, got %d", len(result2.Changes))
+	}
+}
+
+func TestAtomicInsert_ChangeLogNotLostOnAccepted(t *testing.T) {
+	database := setupTestDB(t)
+	userID := seedUser(t, database)
+
+	repo := appSync.NewRepository(database)
+	svc := appSync.NewService(repo, testLogger())
+
+	// Push an event
+	clientEventID := uuid.New().String()
+	events := []appSync.EventInput{
+		{
+			ClientEventID: clientEventID,
+			EventType:     "review_submitted",
+			OccurredAt:    time.Now().UTC().Format(time.RFC3339),
+			Payload:       json.RawMessage(`{"card_id":"abc"}`),
+		},
+	}
+
+	acks, _, err := svc.PushEvents(context.Background(), userID, events)
+	if err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	if acks[0].Status != "accepted" {
+		t.Fatalf("expected accepted, got %s", acks[0].Status)
+	}
+
+	// Verify both sync_events and sync_change_log have the entry
+	var eventCount int
+	err = database.QueryRow("SELECT COUNT(*) FROM sync_events WHERE user_id = ? AND client_event_id = ? AND status = 'accepted'", userID, clientEventID).Scan(&eventCount)
+	if err != nil {
+		t.Fatalf("query sync_events: %v", err)
+	}
+	if eventCount != 1 {
+		t.Fatalf("expected 1 sync_event, got %d", eventCount)
+	}
+
+	var changeCount int
+	err = database.QueryRow("SELECT COUNT(*) FROM sync_change_log WHERE user_id = ? AND entity_id = ?", userID, clientEventID).Scan(&changeCount)
+	if err != nil {
+		t.Fatalf("query sync_change_log: %v", err)
+	}
+	if changeCount != 1 {
+		t.Fatalf("expected 1 change_log entry, got %d", changeCount)
+	}
+}
