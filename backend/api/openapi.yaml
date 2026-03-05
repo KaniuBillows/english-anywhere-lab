@@ -437,6 +437,30 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
 
+  /progress/monthly-report:
+    get:
+      tags: [Progress]
+      summary: Get monthly report with skill breakdown and weakness analysis
+      operationId: getMonthlyReport
+      x-implemented: true
+      parameters:
+        - in: query
+          name: month
+          required: true
+          schema:
+            type: string
+            pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+          description: Year-month in YYYY-MM format
+      responses:
+        '200':
+          description: Monthly report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonthlyReportResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
   /lessons/{lesson_id}/output-tasks:
     get:
       tags: [Output]
@@ -1260,6 +1284,112 @@ components:
           $ref: '#/components/schemas/WeeklyComparison'
           nullable: true
       required: [week_start, total_minutes, active_days, cards_reviewed, cards_new, lessons_completed, listening_minutes, speaking_tasks, writing_tasks, streak, weekly_goal_days, goal_achieved, review_health, daily_breakdown]
+
+    SkillMetric:
+      type: object
+      properties:
+        skill:
+          type: string
+          enum: [listening, speaking, writing, reading]
+        value:
+          type: integer
+        percentage:
+          type: number
+          format: float
+      required: [skill, value, percentage]
+
+    SkillBreakdown:
+      type: object
+      properties:
+        listening:
+          $ref: '#/components/schemas/SkillMetric'
+        speaking:
+          $ref: '#/components/schemas/SkillMetric'
+        writing:
+          $ref: '#/components/schemas/SkillMetric'
+        reading:
+          $ref: '#/components/schemas/SkillMetric'
+      required: [listening, speaking, writing, reading]
+
+    WeaknessItem:
+      type: object
+      properties:
+        skill:
+          type: string
+          enum: [listening, speaking, writing, reading]
+        reason:
+          type: string
+          enum: [low_activity, declining, below_average]
+        value:
+          type: integer
+        prev_value:
+          type: integer
+          nullable: true
+      required: [skill, reason, value]
+
+    MonthlyComparison:
+      type: object
+      properties:
+        minutes_delta:
+          type: integer
+        active_days_delta:
+          type: integer
+        cards_reviewed_delta:
+          type: integer
+        lessons_delta:
+          type: integer
+        accuracy_delta:
+          type: number
+          format: float
+          nullable: true
+      required: [minutes_delta, active_days_delta, cards_reviewed_delta, lessons_delta]
+
+    MonthlyReportResponse:
+      type: object
+      properties:
+        month:
+          type: string
+          pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+        days_in_month:
+          type: integer
+        total_minutes:
+          type: integer
+        active_days:
+          type: integer
+        cards_reviewed:
+          type: integer
+        cards_new:
+          type: integer
+        lessons_completed:
+          type: integer
+        listening_minutes:
+          type: integer
+        speaking_tasks:
+          type: integer
+        writing_tasks:
+          type: integer
+        streak:
+          type: integer
+        monthly_goal_days:
+          type: integer
+        goal_achieved:
+          type: boolean
+        review_health:
+          $ref: '#/components/schemas/ReviewHealth'
+        daily_breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/WeeklyReportDailyPoint'
+        skill_breakdown:
+          $ref: '#/components/schemas/SkillBreakdown'
+        weaknesses:
+          type: array
+          items:
+            $ref: '#/components/schemas/WeaknessItem'
+        previous_month_comparison:
+          $ref: '#/components/schemas/MonthlyComparison'
+          nullable: true
+      required: [month, days_in_month, total_minutes, active_days, cards_reviewed, cards_new, lessons_completed, listening_minutes, speaking_tasks, writing_tasks, streak, monthly_goal_days, goal_achieved, review_health, daily_breakdown, skill_breakdown, weaknesses]
 
     SyncEvent:
       type: object

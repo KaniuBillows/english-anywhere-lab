@@ -90,6 +90,7 @@ func NewRouter(
 			r.Get("/progress/summary", progressH.GetSummary)
 			r.Get("/progress/daily", progressH.GetDaily)
 			r.Get("/progress/weekly-report", progressH.GetWeeklyReport)
+			r.Get("/progress/monthly-report", progressH.GetMonthlyReport)
 
 			// Pack
 			packH := handler.NewPackHandler(packSvc)

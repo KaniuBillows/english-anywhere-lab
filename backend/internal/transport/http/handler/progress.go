@@ -141,3 +141,109 @@ func (h *ProgressHandler) GetWeeklyReport(w http.ResponseWriter, r *http.Request
 
 	writeJSON(w, http.StatusOK, resp)
 }
+
+func (h *ProgressHandler) GetMonthlyReport(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.GetUserID(r.Context())
+	month := r.URL.Query().Get("month")
+	if month == "" {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "month parameter is required (YYYY-MM)")
+		return
+	}
+
+	result, err := h.svc.GetMonthlyReport(r.Context(), userID, month)
+	if err != nil {
+		var ve *progress.ValidationError
+		if errors.As(err, &ve) {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", ve.Message)
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "INTERNAL", "failed to get monthly report")
+		return
+	}
+
+	daily := make([]dto.WeeklyReportDailyPoint, 0, len(result.DailyBreakdown))
+	for _, d := range result.DailyBreakdown {
+		daily = append(daily, dto.WeeklyReportDailyPoint{
+			Date:             d.Date,
+			MinutesLearned:   d.MinutesLearned,
+			LessonsCompleted: d.LessonsCompleted,
+			CardsNew:         d.CardsNew,
+			CardsReviewed:    d.CardsReviewed,
+			ReviewAccuracy:   d.ReviewAccuracy,
+			ListeningMinutes: d.ListeningMinutes,
+			SpeakingTasks:    d.SpeakingTasks,
+			WritingTasks:     d.WritingTasks,
+			StreakCount:      d.StreakCount,
+		})
+	}
+
+	weaknesses := make([]dto.WeaknessItemDTO, 0, len(result.Weaknesses))
+	for _, w := range result.Weaknesses {
+		weaknesses = append(weaknesses, dto.WeaknessItemDTO{
+			Skill:     w.Skill,
+			Reason:    w.Reason,
+			Value:     w.Value,
+			PrevValue: w.PrevValue,
+		})
+	}
+
+	resp := dto.MonthlyReportResponse{
+		Month:            result.Month,
+		DaysInMonth:      result.DaysInMonth,
+		TotalMinutes:     result.TotalMinutes,
+		ActiveDays:       result.ActiveDays,
+		CardsReviewed:    result.CardsReviewed,
+		CardsNew:         result.CardsNew,
+		LessonsCompleted: result.LessonsCompleted,
+		ListeningMinutes: result.ListeningMinutes,
+		SpeakingTasks:    result.SpeakingTasks,
+		WritingTasks:     result.WritingTasks,
+		Streak:           result.Streak,
+		MonthlyGoalDays:  result.MonthlyGoalDays,
+		GoalAchieved:     result.GoalAchieved,
+		ReviewHealth: dto.ReviewHealth{
+			Again:    result.ReviewHealth.Again,
+			Hard:     result.ReviewHealth.Hard,
+			Good:     result.ReviewHealth.Good,
+			Easy:     result.ReviewHealth.Easy,
+			Total:    result.ReviewHealth.Total,
+			Accuracy: result.ReviewHealth.Accuracy,
+		},
+		DailyBreakdown: daily,
+		SkillBreakdown: dto.SkillBreakdownDTO{
+			Listening: dto.SkillMetricDTO{
+				Skill:      result.SkillBreakdown.Listening.Skill,
+				Value:      result.SkillBreakdown.Listening.Value,
+				Percentage: result.SkillBreakdown.Listening.Percentage,
+			},
+			Speaking: dto.SkillMetricDTO{
+				Skill:      result.SkillBreakdown.Speaking.Skill,
+				Value:      result.SkillBreakdown.Speaking.Value,
+				Percentage: result.SkillBreakdown.Speaking.Percentage,
+			},
+			Writing: dto.SkillMetricDTO{
+				Skill:      result.SkillBreakdown.Writing.Skill,
+				Value:      result.SkillBreakdown.Writing.Value,
+				Percentage: result.SkillBreakdown.Writing.Percentage,
+			},
+			Reading: dto.SkillMetricDTO{
+				Skill:      result.SkillBreakdown.Reading.Skill,
+				Value:      result.SkillBreakdown.Reading.Value,
+				Percentage: result.SkillBreakdown.Reading.Percentage,
+			},
+		},
+		Weaknesses: weaknesses,
+	}
+
+	if result.PrevMonth != nil {
+		resp.PreviousMonthComparison = &dto.MonthlyComparison{
+			MinutesDelta:       result.PrevMonth.MinutesDelta,
+			ActiveDaysDelta:    result.PrevMonth.ActiveDaysDelta,
+			CardsReviewedDelta: result.PrevMonth.CardsReviewedDelta,
+			LessonsDelta:       result.PrevMonth.LessonsDelta,
+			AccuracyDelta:      result.PrevMonth.AccuracyDelta,
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}

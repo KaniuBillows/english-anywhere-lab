@@ -67,3 +67,52 @@ type WeeklyReportResponse struct {
 	DailyBreakdown         []WeeklyReportDailyPoint `json:"daily_breakdown"`
 	PreviousWeekComparison *WeeklyComparison        `json:"previous_week_comparison,omitempty"`
 }
+
+type SkillMetricDTO struct {
+	Skill      string  `json:"skill"`
+	Value      int     `json:"value"`
+	Percentage float64 `json:"percentage"`
+}
+
+type SkillBreakdownDTO struct {
+	Listening SkillMetricDTO `json:"listening"`
+	Speaking  SkillMetricDTO `json:"speaking"`
+	Writing   SkillMetricDTO `json:"writing"`
+	Reading   SkillMetricDTO `json:"reading"`
+}
+
+type WeaknessItemDTO struct {
+	Skill     string `json:"skill"`
+	Reason    string `json:"reason"`
+	Value     int    `json:"value"`
+	PrevValue *int   `json:"prev_value,omitempty"`
+}
+
+type MonthlyComparison struct {
+	MinutesDelta       int      `json:"minutes_delta"`
+	ActiveDaysDelta    int      `json:"active_days_delta"`
+	CardsReviewedDelta int      `json:"cards_reviewed_delta"`
+	LessonsDelta       int      `json:"lessons_delta"`
+	AccuracyDelta      *float64 `json:"accuracy_delta,omitempty"`
+}
+
+type MonthlyReportResponse struct {
+	Month                    string                   `json:"month"`
+	DaysInMonth              int                      `json:"days_in_month"`
+	TotalMinutes             int                      `json:"total_minutes"`
+	ActiveDays               int                      `json:"active_days"`
+	CardsReviewed            int                      `json:"cards_reviewed"`
+	CardsNew                 int                      `json:"cards_new"`
+	LessonsCompleted         int                      `json:"lessons_completed"`
+	ListeningMinutes         int                      `json:"listening_minutes"`
+	SpeakingTasks            int                      `json:"speaking_tasks"`
+	WritingTasks             int                      `json:"writing_tasks"`
+	Streak                   int                      `json:"streak"`
+	MonthlyGoalDays          int                      `json:"monthly_goal_days"`
+	GoalAchieved             bool                     `json:"goal_achieved"`
+	ReviewHealth             ReviewHealth              `json:"review_health"`
+	DailyBreakdown           []WeeklyReportDailyPoint `json:"daily_breakdown"`
+	SkillBreakdown           SkillBreakdownDTO        `json:"skill_breakdown"`
+	Weaknesses               []WeaknessItemDTO        `json:"weaknesses"`
+	PreviousMonthComparison  *MonthlyComparison       `json:"previous_month_comparison,omitempty"`
+}
