@@ -14,6 +14,7 @@ import (
 	"github.com/bennyshi/english-anywhere-lab/internal/plan"
 	"github.com/bennyshi/english-anywhere-lab/internal/progress"
 	"github.com/bennyshi/english-anywhere-lab/internal/review"
+	"github.com/bennyshi/english-anywhere-lab/internal/sync"
 	"github.com/bennyshi/english-anywhere-lab/internal/transport/http/handler"
 	"github.com/bennyshi/english-anywhere-lab/internal/transport/http/middleware"
 )
@@ -34,6 +35,7 @@ func NewRouter(
 	progressSvc *progress.Service,
 	packSvc *pack.Service,
 	outputSvc *output.Service,
+	syncSvc *sync.Service,
 	staticFiles StaticFilesConfig,
 ) *chi.Mux {
 	r := chi.NewRouter()
@@ -101,6 +103,11 @@ func NewRouter(
 			r.Get("/lessons/{lesson_id}/output-tasks", outputH.ListTasks)
 			r.Post("/output-tasks/{task_id}/submit", outputH.SubmitWriting)
 			r.Get("/output-tasks/submissions/{submission_id}", outputH.GetSubmission)
+
+			// Sync
+			syncH := handler.NewSyncHandler(syncSvc)
+			r.Post("/sync/events", syncH.PushEvents)
+			r.Get("/sync/changes", syncH.PullChanges)
 		})
 	})
 
