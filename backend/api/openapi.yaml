@@ -492,6 +492,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SyncEventsResponse'
+        '500':
+          description: Transient server error — client should retry the entire batch with exponential backoff
+          $ref: '#/components/responses/InternalError'
 
   /sync/changes:
     get:
@@ -606,6 +609,12 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
     TooManyRequests:
       description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Transient server error (retryable)
       content:
         application/json:
           schema:
