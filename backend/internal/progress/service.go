@@ -462,13 +462,6 @@ func detectWeaknesses(curr, prev *WeeklyAggregate) []WeaknessItem {
 		}
 	}
 
-	// Compute average across skills (for below_average detection)
-	sum := 0
-	for _, sk := range skills {
-		sum += sk.currVal
-	}
-	avg := float64(sum) / 4.0
-
 	var weaknesses []WeaknessItem
 
 	for _, sk := range skills {
@@ -490,16 +483,6 @@ func detectWeaknesses(curr, prev *WeeklyAggregate) []WeaknessItem {
 				Reason:    "declining",
 				Value:     sk.currVal,
 				PrevValue: &pv,
-			})
-			continue
-		}
-
-		// "below_average": significantly below user's own average (less than 50% of avg)
-		if hasActivity && avg > 0 && sk.currVal > 0 && float64(sk.currVal) < avg*0.5 {
-			weaknesses = append(weaknesses, WeaknessItem{
-				Skill:  sk.name,
-				Reason: "below_average",
-				Value:  sk.currVal,
 			})
 		}
 	}

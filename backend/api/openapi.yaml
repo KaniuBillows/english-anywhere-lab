@@ -1319,7 +1319,7 @@ components:
           enum: [listening, speaking, writing, reading]
         reason:
           type: string
-          enum: [low_activity, declining, below_average]
+          enum: [low_activity, declining]
         value:
           type: integer
         prev_value:
