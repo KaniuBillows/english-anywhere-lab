@@ -7,6 +7,8 @@ import { useAuth } from '../auth/useAuth';
 const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] as const;
 const DOMAINS = ['General', 'Business', 'Travel', 'Tech', 'Academic', 'Daily Life'];
 const MINUTES = [10, 15, 20, 30, 45, 60];
+const GOAL_DAYS = [3, 4, 5, 6, 7];
+const TOTAL_STEPS = 4;
 
 export default function OnboardingPage() {
   const [step, setStep] = useState(0);
@@ -14,6 +16,7 @@ export default function OnboardingPage() {
   const [domain, setDomain] = useState('');
   const [customDomain, setCustomDomain] = useState('');
   const [dailyMinutes, setDailyMinutes] = useState(20);
+  const [weeklyGoalDays, setWeeklyGoalDays] = useState(5);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -30,6 +33,7 @@ export default function OnboardingPage() {
         current_level: level,
         target_domain: selectedDomain,
         daily_minutes: dailyMinutes,
+        weekly_goal_days: weeklyGoalDays,
       });
       await bootstrapPlan({
         level,
@@ -54,7 +58,7 @@ export default function OnboardingPage() {
       <div className="w-full max-w-md">
         {/* Progress dots */}
         <div className="flex justify-center gap-2 mb-8">
-          {[0, 1, 2].map((i) => (
+          {Array.from({ length: TOTAL_STEPS }, (_, i) => (
             <div
               key={i}
               className={`h-2 w-2 rounded-full ${i <= step ? 'bg-primary-600' : 'bg-gray-300'}`}
@@ -178,6 +182,44 @@ export default function OnboardingPage() {
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => setStep(1)}
+                className="flex-1 border border-gray-300 rounded-lg py-2.5 font-medium hover:bg-gray-50"
+              >
+                Back
+              </button>
+              <button
+                onClick={() => setStep(3)}
+                className="flex-1 bg-primary-600 text-white rounded-lg py-2.5 font-medium hover:bg-primary-700"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Weekly goal days */}
+        {step === 3 && (
+          <div>
+            <h1 className="text-xl font-bold mb-2">How many days per week?</h1>
+            <p className="text-sm text-gray-500 mb-6">Set your weekly learning goal</p>
+            <div className="flex justify-center gap-3">
+              {GOAL_DAYS.map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setWeeklyGoalDays(d)}
+                  className={`h-12 w-12 rounded-full border-2 text-center font-semibold transition-colors ${
+                    weeklyGoalDays === d
+                      ? 'border-primary-600 bg-primary-50 text-primary-700'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  {d}
+                </button>
+              ))}
+            </div>
+            <p className="text-center text-sm text-gray-400 mt-2">days / week</p>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setStep(2)}
                 className="flex-1 border border-gray-300 rounded-lg py-2.5 font-medium hover:bg-gray-50"
               >
                 Back

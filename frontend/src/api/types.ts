@@ -82,6 +82,11 @@ export interface DailyPlanResponse {
   daily_plan: DailyPlan;
 }
 
+export interface WeeklyPlanResponse {
+  week_start: string;
+  daily_plans: DailyPlan[];
+}
+
 export interface CompleteTaskRequest {
   completed_at: string;
   duration_seconds?: number;

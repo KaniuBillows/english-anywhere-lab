@@ -4,10 +4,11 @@ import type {
   CompleteTaskRequest,
   DailyPlanResponse,
   TaskCompletionResponse,
+  WeeklyPlanResponse,
 } from './types';
 
-export async function bootstrapPlan(req: BootstrapPlanRequest): Promise<DailyPlanResponse> {
-  return apiFetch<DailyPlanResponse>('/api/v1/plans/bootstrap', {
+export async function bootstrapPlan(req: BootstrapPlanRequest): Promise<WeeklyPlanResponse> {
+  return apiFetch<WeeklyPlanResponse>('/api/v1/plans/bootstrap', {
     method: 'POST',
     body: JSON.stringify(req),
   });
