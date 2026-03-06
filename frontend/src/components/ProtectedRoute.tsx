@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
 import LoadingSpinner from './LoadingSpinner';
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {

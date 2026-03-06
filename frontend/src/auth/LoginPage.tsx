@@ -1,15 +1,16 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { login as apiLogin } from '../api/auth';
-import { getMe } from '../api/profile';
-import { useAuth } from './AuthContext';
+import { getTodayPlan } from '../api/plans';
+import { getUserTimezone } from '../lib/date';
+import { useAuth } from './useAuth';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const { login } = useAuth();
+  const { login, refreshUser } = useAuth();
   const navigate = useNavigate();
 
   async function handleSubmit(e: FormEvent) {
@@ -20,10 +21,18 @@ export default function LoginPage() {
     try {
       const res = await apiLogin({ email, password });
       login(res.user, res.tokens.access_token, res.tokens.refresh_token);
+      await refreshUser();
 
-      // Check if onboarding is needed
-      const me = await getMe();
-      if (!me.learning_profile.current_level) {
+      // Check if onboarding is needed by looking for an existing plan
+      let needsOnboarding = true;
+      try {
+        const plan = await getTodayPlan(getUserTimezone());
+        needsOnboarding = !plan.daily_plan.plan_id;
+      } catch {
+        // No plan available → needs onboarding
+      }
+
+      if (needsOnboarding) {
         navigate('/onboarding', { replace: true });
       } else {
         navigate('/today', { replace: true });

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { bootstrapPlan } from '../api/plans';
-import { useAuth } from '../auth/AuthContext';
+import { updateProfile } from '../api/profile';
+import { useAuth } from '../auth/useAuth';
 
 const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] as const;
 const DOMAINS = ['General', 'Business', 'Travel', 'Tech', 'Academic', 'Daily Life'];
@@ -25,6 +26,11 @@ export default function OnboardingPage() {
     setSubmitting(true);
     setError('');
     try {
+      await updateProfile({
+        current_level: level,
+        target_domain: selectedDomain,
+        daily_minutes: dailyMinutes,
+      });
       await bootstrapPlan({
         level,
         target_domain: selectedDomain,

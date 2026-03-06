@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { register as apiRegister } from '../api/auth';
-import { useAuth } from './AuthContext';
+import { useAuth } from './useAuth';
 import { getUserLocale, getUserTimezone } from '../lib/date';
 
 export default function RegisterPage() {
@@ -9,7 +9,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const { login } = useAuth();
+  const { login, refreshUser } = useAuth();
   const navigate = useNavigate();
 
   async function handleSubmit(e: FormEvent) {
@@ -25,6 +25,7 @@ export default function RegisterPage() {
         timezone: getUserTimezone(),
       });
       login(res.user, res.tokens.access_token, res.tokens.refresh_token);
+      await refreshUser();
       navigate('/onboarding', { replace: true });
     } catch (err: unknown) {
       const msg =

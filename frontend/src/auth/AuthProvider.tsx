@@ -1,30 +1,20 @@
 import {
-  createContext,
-  useContext,
   useState,
   useEffect,
   useCallback,
+  useRef,
   type ReactNode,
 } from 'react';
-import type { User, MeResponse } from '../api/types';
+import type { User, LearningProfile } from '../api/types';
 import { getMe } from '../api/profile';
 import { clearTokens, getRefreshToken, setTokens } from '../api/client';
-
-interface AuthContextValue {
-  user: User | null;
-  learningProfile: MeResponse['learning_profile'] | null;
-  loading: boolean;
-  login: (user: User, accessToken: string, refreshToken: string) => void;
-  logout: () => void;
-  refreshUser: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+import { AuthContext } from './authContext';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [learningProfile, setLearningProfile] = useState<MeResponse['learning_profile'] | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [learningProfile, setLearningProfile] = useState<LearningProfile | null>(null);
+  const [loading, setLoading] = useState(() => !!getRefreshToken());
+  const initialized = useRef(false);
 
   const refreshUser = useCallback(async () => {
     try {
@@ -38,12 +28,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (getRefreshToken()) {
-      refreshUser().finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
-  }, [refreshUser]);
+    if (initialized.current) return;
+    initialized.current = true;
+
+    if (!getRefreshToken()) return;
+
+    let cancelled = false;
+    getMe()
+      .then((me) => {
+        if (cancelled) return;
+        setUser(me.user);
+        setLearningProfile(me.learning_profile);
+      })
+      .catch(() => {
+        // token invalid
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, []);
 
   const login = useCallback(
     (u: User, accessToken: string, refreshToken: string) => {
@@ -64,10 +69,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
-  return ctx;
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../auth/AuthContext';
+import { useAuth } from '../auth/useAuth';
 import { updateProfile } from '../api/profile';
 import type { UpdateProfileRequest } from '../api/types';
 import { useNavigate } from 'react-router';
