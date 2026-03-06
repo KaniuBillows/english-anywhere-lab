@@ -61,6 +61,7 @@ export default function OutputTaskListPage() {
           <Link
             key={task.id}
             to={`/output-tasks/${task.id}`}
+            state={{ task }}
             className="block border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow"
           >
             <p className="text-sm text-gray-900 mb-2 line-clamp-2">{task.prompt_text}</p>

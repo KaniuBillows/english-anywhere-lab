@@ -5,10 +5,20 @@ import type { ApiError } from '../api/types';
 
 const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'] as const;
 const DOMAINS = ['General', 'Business', 'Travel', 'Tech', 'Academic', 'Daily Life'];
+const TEMPLATES: { value: string; label: string }[] = [
+  { value: 'vocab_foundation', label: 'Vocab Foundation' },
+  { value: 'scenario_dialog', label: 'Scenario Dialog' },
+  { value: 'intensive_listening', label: 'Intensive Listening' },
+  { value: 'reading_comprehension', label: 'Reading Comprehension' },
+  { value: 'writing_output', label: 'Writing Output' },
+  { value: 'review_booster', label: 'Review Booster' },
+  { value: 'speaking_bootcamp', label: 'Speaking Bootcamp' },
+  { value: 'exam_drill', label: 'Exam Drill' },
+];
 const MINUTES = [10, 15, 20, 30, 45, 60];
 const DAYS = [3, 5, 7, 10, 14];
 const SKILLS = ['listening', 'speaking', 'reading', 'writing'];
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 
 type JobStatus = 'idle' | 'submitting' | 'polling' | 'success' | 'failed' | 'rate_limited';
 
@@ -18,6 +28,7 @@ export default function GeneratePage() {
   const [level, setLevel] = useState('');
   const [domain, setDomain] = useState('');
   const [customDomain, setCustomDomain] = useState('');
+  const [packTemplate, setPackTemplate] = useState('');
   const [dailyMinutes, setDailyMinutes] = useState(20);
   const [days, setDays] = useState(7);
   const [focusSkills, setFocusSkills] = useState<string[]>([]);
@@ -44,6 +55,7 @@ export default function GeneratePage() {
         level,
         domain: selectedDomain,
         daily_minutes: dailyMinutes,
+        pack_template: packTemplate || undefined,
         days,
         focus_skills: focusSkills.length > 0 ? focusSkills : undefined,
       });
@@ -51,7 +63,7 @@ export default function GeneratePage() {
       setJobStatus('polling');
     } catch (err: unknown) {
       const apiErr = err as ApiError;
-      if (apiErr?.code === 'RATE_LIMITED' || apiErr?.message?.includes('429')) {
+      if (apiErr?.code === 'RATE_LIMIT' || apiErr?.message?.includes('429')) {
         setJobStatus('rate_limited');
         setErrorMsg('Too many requests. Please wait a moment and try again.');
       } else {
@@ -267,8 +279,46 @@ export default function GeneratePage() {
           </div>
         )}
 
-        {/* Step 3: Daily minutes */}
+        {/* Step 3: Pack Template */}
         {step === 2 && (
+          <div>
+            <h2 className="text-lg font-semibold mb-2">Pack Template</h2>
+            <p className="text-sm text-gray-500 mb-4">What type of learning pack do you want?</p>
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              {TEMPLATES.map((t) => (
+                <button
+                  key={t.value}
+                  onClick={() => setPackTemplate(t.value)}
+                  className={`rounded-lg border-2 px-3 py-3 text-sm font-medium text-left transition-colors ${
+                    packTemplate === t.value
+                      ? 'border-primary-600 bg-primary-50 text-primary-700'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setStep(1)}
+                className="flex-1 border border-gray-300 rounded-lg py-2.5 font-medium hover:bg-gray-50"
+              >
+                Back
+              </button>
+              <button
+                disabled={!packTemplate}
+                onClick={() => setStep(3)}
+                className="flex-1 bg-primary-600 text-white rounded-lg py-2.5 font-medium hover:bg-primary-700 disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Daily minutes */}
+        {step === 3 && (
           <div>
             <h2 className="text-lg font-semibold mb-2">Daily Minutes</h2>
             <p className="text-sm text-gray-500 mb-4">How much time per day for this pack?</p>
@@ -289,13 +339,13 @@ export default function GeneratePage() {
             </div>
             <div className="flex gap-3 mt-6">
               <button
-                onClick={() => setStep(1)}
+                onClick={() => setStep(2)}
                 className="flex-1 border border-gray-300 rounded-lg py-2.5 font-medium hover:bg-gray-50"
               >
                 Back
               </button>
               <button
-                onClick={() => setStep(3)}
+                onClick={() => setStep(4)}
                 className="flex-1 bg-primary-600 text-white rounded-lg py-2.5 font-medium hover:bg-primary-700"
               >
                 Next
@@ -304,8 +354,8 @@ export default function GeneratePage() {
           </div>
         )}
 
-        {/* Step 4: Days + Focus Skills */}
-        {step === 3 && (
+        {/* Step 5: Days + Focus Skills */}
+        {step === 4 && (
           <div>
             <h2 className="text-lg font-semibold mb-2">Duration & Skills</h2>
             <p className="text-sm text-gray-500 mb-4">How many days, and which skills to focus on?</p>
@@ -346,7 +396,7 @@ export default function GeneratePage() {
 
             <div className="flex gap-3">
               <button
-                onClick={() => setStep(2)}
+                onClick={() => setStep(3)}
                 className="flex-1 border border-gray-300 rounded-lg py-2.5 font-medium hover:bg-gray-50"
               >
                 Back

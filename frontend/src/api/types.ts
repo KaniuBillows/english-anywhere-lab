@@ -287,6 +287,7 @@ export interface GeneratePackRequest {
   level: string;
   domain: string;
   daily_minutes: number;
+  pack_template?: string;
   days?: number;
   focus_skills?: string[];
 }
