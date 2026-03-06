@@ -33,9 +33,9 @@ async function refreshAccessToken(): Promise<string> {
     throw new Error('Refresh failed');
   }
 
-  const data = (await res.json()) as { tokens: AuthTokens };
-  accessToken = data.tokens.access_token;
-  localStorage.setItem('refresh_token', data.tokens.refresh_token);
+  const data = (await res.json()) as AuthTokens;
+  accessToken = data.access_token;
+  localStorage.setItem('refresh_token', data.refresh_token);
   return accessToken;
 }
 

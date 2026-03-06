@@ -12,9 +12,9 @@ export async function getSummary(range: string): Promise<ProgressSummary> {
   );
 }
 
-export async function getDaily(range: string): Promise<ProgressDailyResponse> {
+export async function getDaily(from: string, to: string): Promise<ProgressDailyResponse> {
   return apiFetch<ProgressDailyResponse>(
-    `/api/v1/progress/daily?range=${encodeURIComponent(range)}`,
+    `/api/v1/progress/daily?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
   );
 }
 

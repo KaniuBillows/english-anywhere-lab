@@ -76,12 +76,12 @@ export default function MonthlyReport() {
                   <div key={skill}>
                     <div className="flex justify-between text-sm mb-0.5">
                       <span className="capitalize">{skill}</span>
-                      <span className="text-gray-500">{Math.round(metric.percentage)}%</span>
+                      <span className="text-gray-500">{Math.round(metric.percentage * 100)}%</span>
                     </div>
                     <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary-500 rounded-full"
-                        style={{ width: `${metric.percentage}%` }}
+                        style={{ width: `${metric.percentage * 100}%` }}
                       />
                     </div>
                   </div>

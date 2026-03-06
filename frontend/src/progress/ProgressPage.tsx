@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { getSummary, getDaily } from '../api/progress';
 import type { ProgressSummary, DailyPoint } from '../api/types';
+import { rangeToFromTo } from '../lib/date';
 import SummaryCards from './SummaryCards';
 import DailyChart from './DailyChart';
 import LoadingSpinner from '../components/LoadingSpinner';
@@ -20,7 +21,8 @@ export default function ProgressPage() {
     setLoading(true);
     setError('');
     try {
-      const [s, d] = await Promise.all([getSummary(r), getDaily(r)]);
+      const { from, to } = rangeToFromTo(r);
+      const [s, d] = await Promise.all([getSummary(r), getDaily(from, to)]);
       setSummary(s);
       setPoints(d.points);
     } catch (err: unknown) {
