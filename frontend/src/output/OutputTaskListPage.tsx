@@ -60,7 +60,7 @@ export default function OutputTaskListPage() {
         {tasks.map((task) => (
           <Link
             key={task.id}
-            to={`/output-tasks/${task.id}`}
+            to={`/output-tasks/${task.id}?lessonId=${lessonId}`}
             state={{ task }}
             className="block border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow"
           >

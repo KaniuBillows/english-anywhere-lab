@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router';
-import { submitWriting } from '../api/output';
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router';
+import { listOutputTasks, submitWriting } from '../api/output';
 import type { OutputTask, SubmissionResponse } from '../api/types';
+import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import FeedbackPanel from './FeedbackPanel';
 
-type Phase = 'writing' | 'submitting' | 'feedback' | 'error';
+type Phase = 'loading' | 'writing' | 'submitting' | 'feedback' | 'error';
 
 const MAX_CHARS = 5000;
 
@@ -13,20 +14,45 @@ export default function WritingTaskPage() {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
 
-  // Task data is passed via route state from OutputTaskListPage
-  const task: OutputTask = (location.state as { task?: OutputTask })?.task ?? {
-    id: taskId ?? '',
-    task_type: 'writing',
-    prompt_text: '',
-  };
+  const stateTask = (location.state as { task?: OutputTask } | null)?.task;
+  const lessonId = searchParams.get('lessonId') ?? stateTask?.lesson_id;
 
-  const [phase, setPhase] = useState<Phase>('writing');
+  // If we have task data from route state, use it directly.
+  // If no route state but we have lessonId, we can recover — start in loading.
+  // If neither, start with degraded empty task in writing phase.
+  const needsFetch = !stateTask && !!lessonId && !!taskId;
+  const fallbackTask: OutputTask = { id: taskId ?? '', task_type: 'writing', prompt_text: '' };
+
+  const [task, setTask] = useState<OutputTask | null>(stateTask ?? (needsFetch ? null : fallbackTask));
+  const [phase, setPhase] = useState<Phase>(stateTask || !needsFetch ? 'writing' : 'loading');
   const [error, setError] = useState('');
   const [answer, setAnswer] = useState('');
   const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
   const [showHint, setShowHint] = useState(false);
   const [longWait, setLongWait] = useState(false);
+
+  // When route state is missing (refresh / direct URL), recover via lesson API
+  useEffect(() => {
+    if (!needsFetch) return;
+    let cancelled = false;
+    const empty: OutputTask = { id: taskId!, task_type: 'writing', prompt_text: '' };
+    async function recover() {
+      try {
+        const res = await listOutputTasks(lessonId!);
+        if (cancelled) return;
+        const found = res.items.find((t) => t.id === taskId);
+        setTask(found ?? empty);
+      } catch {
+        if (cancelled) return;
+        setTask(empty);
+      }
+      if (!cancelled) setPhase('writing');
+    }
+    recover();
+    return () => { cancelled = true; };
+  }, [needsFetch, taskId, lessonId]);
 
   // Extended wait message
   const longWaitTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -64,6 +90,8 @@ export default function WritingTaskPage() {
     setPhase('writing');
   }
 
+  if (phase === 'loading') return <LoadingSpinner />;
+
   return (
     <div className="p-4 pb-24 max-w-lg mx-auto">
       <button
@@ -76,7 +104,7 @@ export default function WritingTaskPage() {
       {/* Prompt */}
       <div className="mb-4">
         <h1 className="text-lg font-bold mb-2">Writing Task</h1>
-        {task.prompt_text ? (
+        {task?.prompt_text ? (
           <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-800 whitespace-pre-wrap">
             {task.prompt_text}
           </div>
@@ -86,7 +114,7 @@ export default function WritingTaskPage() {
           </p>
         )}
 
-        {task.reference_answer && (
+        {task?.reference_answer && (
           <div className="mt-2">
             <button
               onClick={() => setShowHint(!showHint)}

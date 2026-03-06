@@ -47,7 +47,7 @@ export default function GeneratePage() {
   }
 
   async function handleSubmit() {
-    if (!level || !selectedDomain) return;
+    if (!level || !selectedDomain || !packTemplate) return;
     setJobStatus('submitting');
     setErrorMsg('');
     try {
@@ -55,7 +55,7 @@ export default function GeneratePage() {
         level,
         domain: selectedDomain,
         daily_minutes: dailyMinutes,
-        pack_template: packTemplate || undefined,
+        pack_template: packTemplate,
         days,
         focus_skills: focusSkills.length > 0 ? focusSkills : undefined,
       });
