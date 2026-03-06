@@ -250,6 +250,109 @@ export interface MonthlyReportResponse {
   previous_month_comparison?: MonthlyComparison;
 }
 
+// ─── Packs ──────────────────────────────────────────────────────
+export interface Pack {
+  id: string;
+  source: string;
+  title: string;
+  description?: string;
+  domain: string;
+  level: string;
+  estimated_minutes: number;
+  pack_template?: string;
+}
+
+export interface Lesson {
+  lesson_id: string;
+  title: string;
+  lesson_type: string;
+  position: number;
+  exercise_types?: string[];
+  output_task_count?: number;
+}
+
+export interface PackListResponse {
+  items: Pack[];
+  page: number;
+  page_size: number;
+  total: number;
+}
+
+export interface PackDetailResponse {
+  pack: Pack;
+  lessons: Lesson[];
+}
+
+export interface GeneratePackRequest {
+  level: string;
+  domain: string;
+  daily_minutes: number;
+  pack_template: string;
+  days?: number;
+  focus_skills?: string[];
+}
+
+export interface GenerationJobResponse {
+  job_id: string;
+  status: string;
+  created_at: string;
+  finished_at?: string;
+  pack_id?: string;
+  error_message?: string;
+}
+
+export interface GenericMessage {
+  message: string;
+}
+
+// ─── Output Tasks ───────────────────────────────────────────────
+export interface TaskAssets {
+  image_url?: string;
+  audio_url?: string;
+}
+
+export interface OutputTask {
+  id: string;
+  lesson_id?: string;
+  task_type: string;
+  prompt_text: string;
+  reference_answer?: string;
+  level?: string;
+  exercise_type?: string;
+  evaluation_mode?: string;
+  assets?: TaskAssets;
+}
+
+export interface OutputTaskListResponse {
+  items: OutputTask[];
+}
+
+export interface SubmitWritingRequest {
+  answer_text: string;
+}
+
+export interface WritingError {
+  original: string;
+  correction: string;
+  explanation: string;
+}
+
+export interface WritingFeedback {
+  overall_score: number;
+  errors: WritingError[];
+  revised_text: string;
+  next_actions: string[];
+}
+
+export interface SubmissionResponse {
+  submission_id: string;
+  task_id: string;
+  answer_text: string;
+  feedback?: WritingFeedback;
+  score: number;
+  submitted_at: string;
+}
+
 // ─── Error ──────────────────────────────────────────────────────
 export interface ApiError {
   code: string;
