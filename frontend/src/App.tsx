@@ -11,6 +11,11 @@ import ProgressPage from './progress/ProgressPage';
 import WeeklyReport from './progress/WeeklyReport';
 import MonthlyReport from './progress/MonthlyReport';
 import ProfilePage from './profile/ProfilePage';
+import PackListPage from './packs/PackListPage';
+import GeneratePage from './packs/GeneratePage';
+import PackDetailPage from './packs/PackDetailPage';
+import OutputTaskListPage from './output/OutputTaskListPage';
+import WritingTaskPage from './output/WritingTaskPage';
 
 export default function App() {
   return (
@@ -41,6 +46,11 @@ export default function App() {
           >
             <Route path="/today" element={<TodayPage />} />
             <Route path="/review" element={<ReviewPage />} />
+            <Route path="/packs" element={<PackListPage />} />
+            <Route path="/packs/generate" element={<GeneratePage />} />
+            <Route path="/packs/:packId" element={<PackDetailPage />} />
+            <Route path="/lessons/:lessonId/tasks" element={<OutputTaskListPage />} />
+            <Route path="/output-tasks/:taskId" element={<WritingTaskPage />} />
             <Route path="/progress" element={<ProgressPage />} />
             <Route path="/progress/weekly" element={<WeeklyReport />} />
             <Route path="/progress/monthly" element={<MonthlyReport />} />
