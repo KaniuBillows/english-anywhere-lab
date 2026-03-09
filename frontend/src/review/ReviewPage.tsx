@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { getReviewQueue, submitReview } from '../api/reviews';
 import type { ReviewCard, Rating } from '../api/types';
+import { useSyncStatus } from '../sync/useSyncStatus';
 import FlashCard from './FlashCard';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
@@ -14,6 +15,7 @@ export default function ReviewPage() {
   const [submitting, setSubmitting] = useState(false);
   const [sessionDone, setSessionDone] = useState(false);
   const showTimeRef = useRef(Date.now());
+  const { enqueue } = useSyncStatus();
 
   // Session stats
   const [stats, setStats] = useState({ reviewed: 0, again: 0, good: 0 });
@@ -63,6 +65,13 @@ export default function ReviewPage() {
         },
         idempotencyKey,
       );
+
+      void enqueue('review_submitted', {
+        card_id: card.card_id,
+        rating,
+        response_ms: responseMs,
+        client_event_id: idempotencyKey,
+      });
 
       setStats((s) => ({
         reviewed: s.reviewed + 1,

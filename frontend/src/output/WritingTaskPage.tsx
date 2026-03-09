@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router';
 import { listOutputTasks, submitWriting } from '../api/output';
 import type { OutputTask, SubmissionResponse } from '../api/types';
+import { useSyncStatus } from '../sync/useSyncStatus';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import FeedbackPanel from './FeedbackPanel';
@@ -32,6 +33,7 @@ export default function WritingTaskPage() {
   const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
   const [showHint, setShowHint] = useState(false);
   const [longWait, setLongWait] = useState(false);
+  const { enqueue } = useSyncStatus();
 
   // When route state is missing (refresh / direct URL), recover via lesson API
   useEffect(() => {
@@ -73,6 +75,11 @@ export default function WritingTaskPage() {
       const res = await submitWriting(taskId, { answer_text: answer });
       setSubmission(res);
       setPhase('feedback');
+      void enqueue('output_submitted', {
+        task_id: taskId,
+        submission_id: res.submission_id,
+        score: res.score,
+      });
     } catch (err: unknown) {
       const msg =
         err && typeof err === 'object' && 'message' in err

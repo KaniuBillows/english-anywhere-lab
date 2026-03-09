@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { AuthProvider } from './auth/AuthProvider';
-import SyncProvider from './sync/SyncProvider';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppShell from './components/AppShell';
 import LoginPage from './auth/LoginPage';
@@ -22,7 +21,6 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <SyncProvider>
         <Routes>
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
@@ -62,7 +60,6 @@ export default function App() {
           {/* Default redirect */}
           <Route path="*" element={<Navigate to="/today" replace />} />
         </Routes>
-        </SyncProvider>
       </AuthProvider>
     </BrowserRouter>
   );

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../auth/useAuth';
 import { updateProfile } from '../api/profile';
 import type { UpdateProfileRequest } from '../api/types';
+import { useSyncStatus } from '../sync/useSyncStatus';
 import { useNavigate } from 'react-router';
 
 const LEVELS = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
@@ -11,6 +12,7 @@ const MINUTES = [10, 15, 20, 30, 45, 60];
 export default function ProfilePage() {
   const { user, learningProfile, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
+  const { enqueue } = useSyncStatus();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -43,6 +45,12 @@ export default function ProfilePage() {
       await updateProfile(req);
       await refreshUser();
       setEditing(false);
+      void enqueue('profile_updated', {
+        current_level: level,
+        target_domain: domain,
+        daily_minutes: dailyMinutes,
+        weekly_goal_days: weeklyGoalDays,
+      });
     } catch (err: unknown) {
       const msg =
         err && typeof err === 'object' && 'message' in err

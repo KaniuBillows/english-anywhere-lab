@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { completeTask } from '../api/plans';
 import type { PlanTask } from '../api/types';
+import { useSyncStatus } from '../sync/useSyncStatus';
 
 const TYPE_COLORS: Record<string, string> = {
   input: 'bg-blue-500',
@@ -18,6 +19,7 @@ interface Props {
 export default function TaskCard({ task, planId, onComplete }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const isCompleted = task.status === 'completed';
+  const { enqueue } = useSyncStatus();
 
   const stripe = TYPE_COLORS[task.task_type] || 'bg-gray-400';
 
@@ -26,6 +28,10 @@ export default function TaskCard({ task, planId, onComplete }: Props) {
     try {
       await completeTask(planId, task.task_id, {
         completed_at: new Date().toISOString(),
+      });
+      void enqueue('task_completed', {
+        task_id: task.task_id,
+        plan_id: planId,
       });
       onComplete();
     } catch {

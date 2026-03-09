@@ -3,6 +3,7 @@ import { SyncContext } from './syncContext';
 import { SyncEngine, type SyncStatus } from './engine';
 import { enqueueEvent } from './db';
 import { generateEventId } from './uuid';
+import { getAccessToken } from '../api/client';
 import type { SyncEventType } from '../api/types';
 
 export default function SyncProvider({ children }: { children: ReactNode }) {
@@ -17,8 +18,10 @@ export default function SyncProvider({ children }: { children: ReactNode }) {
         setPendingCount(count);
       },
       onChangesReceived(changes) {
-        // Future: update local cache / trigger React Query invalidation
         console.debug('[sync] received changes:', changes.length);
+      },
+      getAccessToken() {
+        return getAccessToken();
       },
     });
     engineRef.current = engine;

@@ -25,11 +25,32 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
-            urlPattern: /^https?:\/\/.*\/api\/v1\/.*/i,
+            // Pack catalogue — read-only, safe to cache
+            urlPattern: /\/api\/v1\/packs(\?.*)?$/i,
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'api-cache',
-              expiration: { maxAgeSeconds: 300 },
+              cacheName: 'api-packs-list',
+              expiration: { maxAgeSeconds: 300, maxEntries: 20 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Individual pack detail + lessons — read-only
+            urlPattern: /\/api\/v1\/packs\/[^/]+$/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-pack-detail',
+              expiration: { maxAgeSeconds: 300, maxEntries: 50 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Lesson output tasks — read-only
+            urlPattern: /\/api\/v1\/lessons\/[^/]+\/output-tasks$/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-output-tasks',
+              expiration: { maxAgeSeconds: 300, maxEntries: 50 },
               cacheableResponse: { statuses: [0, 200] },
             },
           },

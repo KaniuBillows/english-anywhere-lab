@@ -17,6 +17,10 @@ export function getRefreshToken(): string | null {
   return localStorage.getItem('refresh_token');
 }
 
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
 async function refreshAccessToken(): Promise<string> {
   const rt = getRefreshToken();
   if (!rt) throw new Error('No refresh token');

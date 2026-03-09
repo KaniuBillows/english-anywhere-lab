@@ -1,4 +1,4 @@
-import { pushSyncEvents, pullSyncChanges } from '../api/sync';
+import { pushSyncEventsRaw, pullSyncChanges } from '../api/sync';
 import type { SyncChange, SyncEventDTO } from '../api/types';
 import {
   getPendingEvents,
@@ -21,6 +21,7 @@ const PRUNE_AGE_DAYS = 7;
 export interface SyncEngineCallbacks {
   onStatusChange: (status: SyncStatus, pendingCount: number) => void;
   onChangesReceived: (changes: SyncChange[]) => void;
+  getAccessToken: () => string | null;
 }
 
 export class SyncEngine {
@@ -90,25 +91,55 @@ export class SyncEngine {
       payload: e.payload,
     }));
 
+    const token = this.callbacks.getAccessToken();
+
+    let res: { status: number; data?: Awaited<ReturnType<typeof pushSyncEventsRaw>>['data'] };
     try {
-      const res = await pushSyncEvents({ events });
-      for (const ack of res.acks) {
+      res = await pushSyncEventsRaw({ events }, token);
+    } catch {
+      // Network error (offline, DNS, etc.) — treat as transient
+      const ids = eligible.map((e) => e.client_event_id);
+      await incrementRetry(ids);
+      await this.backoff(eligible);
+      throw new Error('Network error during push');
+    }
+
+    // 2xx — process per-event acks
+    if (res.status >= 200 && res.status < 300 && res.data) {
+      for (const ack of res.data.acks) {
         if (ack.status === 'accepted' || ack.status === 'duplicate') {
           await markAcked(ack.client_event_id);
         } else {
           await markRejected(ack.client_event_id);
         }
       }
-    } catch (err: unknown) {
-      // On 5xx-like errors, increment retry with exponential backoff
+      return;
+    }
+
+    // 401 — auth expired; don't burn retries, let next cycle try after token refresh
+    if (res.status === 401) {
+      return;
+    }
+
+    // 5xx — transient server failure, increment retry + exponential backoff
+    if (res.status >= 500) {
       const ids = eligible.map((e) => e.client_event_id);
       await incrementRetry(ids);
-
-      const maxRetry = Math.max(...eligible.map((e) => e.retry_count));
-      const backoff = Math.min(BACKOFF_BASE_MS * 2 ** maxRetry, BACKOFF_CAP_MS);
-      await new Promise((r) => setTimeout(r, backoff));
-      throw err;
+      await this.backoff(eligible);
+      throw new Error(`Server error ${res.status} during push`);
     }
+
+    // Other 4xx — client error, don't retry (would never succeed)
+    // Log and move on without incrementing retry or throwing
+    console.warn(`[sync] push got ${res.status}, skipping batch`);
+  }
+
+  private async backoff(
+    events: { retry_count: number }[],
+  ): Promise<void> {
+    const maxRetry = Math.max(...events.map((e) => e.retry_count));
+    const delay = Math.min(BACKOFF_BASE_MS * 2 ** maxRetry, BACKOFF_CAP_MS);
+    await new Promise((r) => setTimeout(r, delay));
   }
 
   private async pull(): Promise<void> {
