@@ -353,6 +353,49 @@ export interface SubmissionResponse {
   submitted_at: string;
 }
 
+// ─── Sync ───────────────────────────────────────────────────────
+export type SyncEventType =
+  | 'review_submitted'
+  | 'output_submitted'
+  | 'task_completed'
+  | 'profile_updated';
+
+export type SyncAckStatus = 'accepted' | 'duplicate' | 'rejected';
+
+export interface SyncEventDTO {
+  client_event_id: string;
+  event_type: SyncEventType;
+  occurred_at: string;
+  payload: Record<string, unknown>;
+}
+
+export interface SyncEventsRequest {
+  events: SyncEventDTO[];
+}
+
+export interface SyncEventAck {
+  client_event_id: string;
+  status: SyncAckStatus;
+  reason?: string;
+}
+
+export interface SyncEventsResponse {
+  acks: SyncEventAck[];
+  server_cursor: string;
+}
+
+export interface SyncChange {
+  entity_type: string;
+  entity_id: string;
+  op: 'upsert' | 'delete';
+  payload: Record<string, unknown>;
+}
+
+export interface SyncChangesResponse {
+  next_cursor: string;
+  changes: SyncChange[];
+}
+
 // ─── Error ──────────────────────────────────────────────────────
 export interface ApiError {
   code: string;
